@@ -7635,9 +7635,6 @@ struct ChatView: View {
                                 windowState.startNewChat()
                                 session.projectId = project.id
                             },
-                            onClose: {
-                                openProjectId = nil
-                            },
                             onDelete: {
                                 ChatSessionsManager.shared.deleteProject(id: project.id)
                                 if session.projectId == project.id {

@@ -15,8 +15,6 @@ struct ProjectDetailView: View {
     let onOpenSession: (ChatSessionData) -> Void
     /// Start a new chat inside this project.
     let onNewChat: () -> Void
-    /// Dismiss the page back to the chat surface.
-    let onClose: () -> Void
     /// Delete the project (host detaches member chats and closes the page).
     /// Called after this view's own confirmation dialog.
     let onDelete: () -> Void
@@ -39,22 +37,19 @@ struct ProjectDetailView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                    instructionsSection
-                    conversationsSection
-                }
-                .frame(maxWidth: 640)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                header
+                instructionsSection
+                conversationsSection
             }
-            .scrollIndicators(.hidden)
+            .frame(maxWidth: 640)
+            .padding(.horizontal, 32)
+            .padding(.top, 64)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity)
         }
+        .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.primaryBackground)
         .onAppear { syncDraft() }
@@ -67,26 +62,6 @@ struct ProjectDetailView: View {
         guard loadedProjectId != project.id else { return }
         loadedProjectId = project.id
         instructionsDraft = project.instructions
-    }
-
-    // MARK: - Top Bar
-
-    private var topBar: some View {
-        HStack {
-            Spacer()
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(theme.secondaryBackground.opacity(0.5)))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .localizedHelp("Close")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 48)
     }
 
     // MARK: - Header
