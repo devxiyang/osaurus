@@ -22,6 +22,7 @@ struct ProjectDetailView: View {
     @Environment(\.theme) private var theme
     @Environment(\.themedAlertScope) private var alertScope
     @ObservedObject private var sessionsManager = ChatSessionsManager.shared
+    @ObservedObject private var knowledgeManager = KnowledgeManager.shared
     /// Draft of the instructions editor. Saved explicitly; `hasEdits`
     /// drives the Save button's visibility.
     @State private var instructionsDraft: String = ""
@@ -81,6 +82,11 @@ struct ProjectDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 instructionsSection
+                // Only meaningful once the user has knowledge collections;
+                // the empty case would just advertise an unrelated feature.
+                if !knowledgeManager.collections.isEmpty {
+                    knowledgeSection
+                }
                 conversationsSection
             }
             .frame(maxWidth: 640)
@@ -194,6 +200,69 @@ struct ProjectDetailView: View {
     private func saveInstructions() {
         var updated = project
         updated.instructions = instructionsDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        ProjectManager.shared.update(updated)
+    }
+
+    // MARK: - Knowledge
+
+    /// Toggle rows granting knowledge collections to this project. Granted
+    /// collections are searchable from every chat in the project (unioned
+    /// with the agent's own grants at request time).
+    private var knowledgeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Knowledge", bundle: .module)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(theme.primaryText)
+
+            Text("Collections every chat in this project can search.", bundle: .module)
+                .font(.system(size: 11))
+                .foregroundColor(theme.secondaryText)
+
+            VStack(spacing: 2) {
+                ForEach(knowledgeManager.collections) { collection in
+                    knowledgeToggleRow(collection)
+                }
+            }
+        }
+    }
+
+    private func knowledgeToggleRow(_ collection: KnowledgeCollection) -> some View {
+        let isGranted = project.knowledgeCollectionIds.contains(collection.id)
+        return Button {
+            toggleCollection(collection.id)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isGranted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isGranted ? theme.accentColor : theme.secondaryText.opacity(0.6))
+                Image(systemName: "books.vertical")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(theme.secondaryText)
+                    .frame(width: 16)
+                Text(verbatim: collection.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(theme.primaryText)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isGranted ? theme.accentColor.opacity(theme.isDark ? 0.10 : 0.07) : .clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleCollection(_ id: UUID) {
+        var updated = project
+        if let index = updated.knowledgeCollectionIds.firstIndex(of: id) {
+            updated.knowledgeCollectionIds.remove(at: index)
+        } else {
+            updated.knowledgeCollectionIds.append(id)
+        }
         ProjectManager.shared.update(updated)
     }
 

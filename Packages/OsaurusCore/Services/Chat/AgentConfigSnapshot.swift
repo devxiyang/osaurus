@@ -263,8 +263,20 @@ public struct AgentConfigSnapshot: Sendable, Equatable {
         agentId: UUID,
         requestToolsDisabled: Bool = false,
         modelOverride: String? = nil,
-        modelTypeOverride: String? = nil
+        modelTypeOverride: String? = nil,
+        projectId: UUID? = nil
     ) -> AgentConfigSnapshot {
+        // Project knowledge collections join the agent's grants for this
+        // compose: they gate the knowledge tools into the schema even when
+        // the agent's own knowledge opt-in is off, matching the union the
+        // tools apply at execution time (`KnowledgeToolScope.resolve`).
+        let projectCollections: [KnowledgeCollection] = {
+            guard let projectId,
+                let project = ProjectManager.shared.project(for: projectId)
+            else { return [] }
+            return KnowledgeManager.shared.enabledCollections(
+                withIds: project.knowledgeCollectionIds)
+        }()
         let mgr = AgentManager.shared
         // One resolve services every capability gate (positive polarity),
         // closing the mid-fan-out race the old per-field calls risked.
@@ -340,14 +352,21 @@ public struct AgentConfigSnapshot: Sendable, Equatable {
             spawnConfiguration: spawnConfiguration,
             // Pre-fold the "anything to search?" half of the gate, like the
             // spawn tools: enabled with zero grants keeps the tools hidden.
-            knowledgeEnabled: caps.knowledgeEnabled && !caps.knowledgeCollectionIds.isEmpty,
+            // Project collections open the gate on their own.
+            knowledgeEnabled: (caps.knowledgeEnabled && !caps.knowledgeCollectionIds.isEmpty)
+                || !projectCollections.isEmpty,
             knowledgeCuratorEnabled: caps.knowledgeCuratorEnabled
                 && !caps.knowledgeCollectionIds.isEmpty,
             // Same grant resolution the tools use at execution time
-            // (`effectiveKnowledgeCollections`), captured here so the
-            // prompt section can't race a mid-compose grant edit.
-            knowledgeCollections: mgr.effectiveKnowledgeCollections(for: agentId)
-                .map(\.grantDescriptor),
+            // (`effectiveKnowledgeCollections` ∪ project collections),
+            // captured here so the prompt section can't race a
+            // mid-compose grant edit.
+            knowledgeCollections: {
+                var collections = mgr.effectiveKnowledgeCollections(for: agentId)
+                let known = Set(collections.map(\.id))
+                collections += projectCollections.filter { !known.contains($0.id) }
+                return collections.map(\.grantDescriptor)
+            }(),
             // Usable = enabled with outbound mode != off, including
             // automatic destinations derived from the channel setup the
             // user already completed. Captured per compose so a binding

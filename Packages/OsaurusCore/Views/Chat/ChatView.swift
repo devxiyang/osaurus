@@ -4944,6 +4944,7 @@ final class ChatSession: ObservableObject {
             // this instead of inferring provenance from surface flags.
             await ChatExecutionContext.$currentSessionSource.withValue(source) { [self] in
             await ChatExecutionContext.$currentAgentId.withValue(turnAgentId) { [self] in
+            await ChatExecutionContext.$currentProjectId.withValue(self.projectId) { [self] in
             await ChatExecutionContext.$currentUserRequest.withValue(
                 trimmed.isEmpty ? nil : trimmed
             ) { [self] in
@@ -5131,7 +5132,8 @@ final class ChatSession: ObservableObject {
                         frozenToolSpecs: cachedSession?.initialToolSpecs,
                         frozenManifest: cachedSession?.frozenManifest,
                         frozenSoul: cachedSession?.frozenSoul,
-                        trace: ttftTrace
+                        trace: ttftTrace,
+                        projectId: projectId
                     )
                     guard isRunActive(runId) else { return }
 
@@ -6709,6 +6711,7 @@ final class ChatSession: ObservableObject {
             }  // ChatExecutionContext.$currentEnableThinking.withValue
             }  // ChatExecutionContext.$currentModelName.withValue
             }  // ChatExecutionContext.$currentUserRequest.withValue
+            }  // ChatExecutionContext.$currentProjectId.withValue
             }  // ChatExecutionContext.$currentAgentId.withValue
             }  // ChatExecutionContext.$currentSessionSource.withValue
             }  // ChatExecutionContext.$currentFolderRoot.withValue

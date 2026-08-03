@@ -103,7 +103,8 @@ public struct SystemPromptComposer: Sendable {
         frozenToolSpecs: [Tool]? = nil,
         frozenManifest: String? = nil,
         frozenSoul: String? = nil,
-        trace: TTFTTrace? = nil
+        trace: TTFTTrace? = nil,
+        projectId: UUID? = nil
     ) async -> ComposedContext {
         await composeChatContext(
             ComposeRequest(
@@ -119,7 +120,8 @@ public struct SystemPromptComposer: Sendable {
                 frozenToolSpecs: frozenToolSpecs,
                 frozenManifest: frozenManifest,
                 frozenSoul: frozenSoul,
-                trace: trace
+                trace: trace,
+                projectId: projectId
             )
         )
     }
@@ -144,7 +146,8 @@ public struct SystemPromptComposer: Sendable {
             agentId: request.agentId,
             requestToolsDisabled: request.toolsDisabled,
             modelOverride: request.model,
-            modelTypeOverride: request.modelType
+            modelTypeOverride: request.modelType,
+            projectId: request.projectId
         )
         let composer = forChat(
             snapshot: snapshot,
