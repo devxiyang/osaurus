@@ -197,6 +197,34 @@ final class ChatSessionsManager: ObservableObject {
         upsertInMemory(session)
     }
 
+    /// Move a session into a project (or out, with nil). Same
+    /// in-memory-first lookup as `rename`; persists via a targeted async
+    /// column update so a metadata-only copy can never clobber turn rows
+    /// and the main actor never blocks on the DB transaction. Does not
+    /// touch `updatedAt`: grouping is a display concern.
+    func setProject(id: UUID, projectId: UUID?) {
+        guard
+            var session = sessions.first(where: { $0.id == id })
+                ?? ChatSessionStore.load(id: id)
+        else { return }
+        guard session.projectId != projectId else { return }
+        session.projectId = projectId
+        ChatSessionStore.setProjectAsync(id: id, projectId: projectId)
+        upsertInMemory(session)
+    }
+
+    /// Detach all sessions from a deleted project and drop the project
+    /// record. Call this instead of `ProjectManager.delete` directly.
+    func deleteProject(id: UUID) {
+        ChatSessionStore.clearProjectAsync(projectId: id)
+        var updated = sessions
+        for index in updated.indices where updated[index].projectId == id {
+            updated[index].projectId = nil
+        }
+        sessions = updated
+        ProjectManager.shared.delete(id: id)
+    }
+
     /// Get a session by ID
     func session(for id: UUID) -> ChatSessionData? {
         sessions.first { $0.id == id }

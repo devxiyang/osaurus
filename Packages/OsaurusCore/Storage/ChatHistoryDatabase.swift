@@ -177,7 +177,7 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
     /// stamped newer than this is refused (forward-version fail-fast).
     /// Internal (not private) so migration-repair tests assert "reconciled
     /// to the latest" against the real constant instead of a stale literal.
-    static let latestSchemaVersion = 13
+    static let latestSchemaVersion = 14
 
     private func runMigrations() throws {
         let current = try getSchemaVersion()
@@ -206,6 +206,7 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
         if current < 11 { try runMigrationStep(11, migrateToV11) }
         if current < 12 { try runMigrationStep(12, migrateToV12) }
         if current < 13 { try runMigrationStep(13, migrateToV13) }
+        if current < 14 { try runMigrationStep(14, migrateToV14) }
     }
 
     /// Run one migration body atomically. Called only from `runMigrations`,
@@ -442,6 +443,14 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
         try setSchemaVersion(13)
     }
 
+    /// v14: add `project_id` so sessions can be grouped under user-created
+    /// projects. Nullable — legacy rows belong to no project.
+    private func migrateToV14() throws {
+        try addColumnIfMissing("sessions", "project_id", "TEXT")
+        try executeRaw("CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions (project_id)")
+        try setSchemaVersion(14)
+    }
+
     // MARK: - Public API: sessions
 
     /// Insert or replace the session row and incrementally upsert its
@@ -543,6 +552,50 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
             } catch {
                 try? self.executeRaw("ROLLBACK")
                 print("[ChatHistoryDatabase] async title update failed for \(id): \(error)")
+            }
+        }
+    }
+
+    /// Update ONLY a session's project membership, off the caller's thread.
+    /// Targeted for the same reason as `updateSessionTitleAsync`: the caller's
+    /// in-memory copy may be metadata-only, and a full save would delete the
+    /// conversation's turn rows. Leaves `updated_at` alone so moving a chat
+    /// into a project never reorders the recency list.
+    public func updateSessionProjectAsync(id: UUID, projectId: UUID?) {
+        queue.async { [weak self] in
+            guard let self, self.db != nil else { return }
+            do {
+                try self.executeRaw("BEGIN TRANSACTION")
+                try self.transactionalStep(
+                    "UPDATE sessions SET project_id = ?1 WHERE id = ?2"
+                ) { stmt in
+                    Self.bindText(stmt, index: 1, value: projectId?.uuidString)
+                    Self.bindText(stmt, index: 2, value: id.uuidString)
+                }
+                try self.executeRaw("COMMIT")
+            } catch {
+                try? self.executeRaw("ROLLBACK")
+                print("[ChatHistoryDatabase] async project update failed for \(id): \(error)")
+            }
+        }
+    }
+
+    /// Detach every session from `projectId`, off the caller's thread.
+    /// Used when a project is deleted so its chats fall back to "no project".
+    public func clearProjectAsync(projectId: UUID) {
+        queue.async { [weak self] in
+            guard let self, self.db != nil else { return }
+            do {
+                try self.executeRaw("BEGIN TRANSACTION")
+                try self.transactionalStep(
+                    "UPDATE sessions SET project_id = NULL WHERE project_id = ?1"
+                ) { stmt in
+                    Self.bindText(stmt, index: 1, value: projectId.uuidString)
+                }
+                try self.executeRaw("COMMIT")
+            } catch {
+                try? self.executeRaw("ROLLBACK")
+                print("[ChatHistoryDatabase] async project clear failed for \(projectId): \(error)")
             }
         }
     }
@@ -1016,6 +1069,7 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
             Self.bindBlob(stmt, index: 13, value: session.folderBookmark)
             Self.bindText(stmt, index: 14, value: session.folderPath)
             sqlite3_bind_int(stmt, 15, session.pinned ? 1 : 0)
+            Self.bindText(stmt, index: 16, value: session.projectId?.uuidString)
         }
     }
 
@@ -1228,7 +1282,8 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
     private static let baseSessionSelectSQL = """
         SELECT id, title, created_at, updated_at, selected_model, agent_id,
                source, source_plugin_id, external_session_key, dispatch_task_id,
-               archived, capabilities, folder_bookmark, folder_path, pinned
+               archived, capabilities, folder_bookmark, folder_path, pinned,
+               project_id
         FROM sessions
         """
 
@@ -1238,8 +1293,9 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
         INSERT INTO sessions
             (id, title, created_at, updated_at, selected_model, agent_id,
              source, source_plugin_id, external_session_key, dispatch_task_id,
-             archived, capabilities, folder_bookmark, folder_path, pinned)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             archived, capabilities, folder_bookmark, folder_path, pinned,
+             project_id)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
         ON CONFLICT(id) DO UPDATE SET
             title                = excluded.title,
             updated_at           = excluded.updated_at,
@@ -1253,7 +1309,8 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
             capabilities         = excluded.capabilities,
             folder_bookmark      = excluded.folder_bookmark,
             folder_path          = excluded.folder_path,
-            pinned               = excluded.pinned
+            pinned               = excluded.pinned,
+            project_id           = excluded.project_id
         """
 
     private static let insertTurnSQL = """
@@ -1317,6 +1374,7 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
         }
         let folderPath = sqlite3_column_text(stmt, 13).map { String(cString: $0) }
         let pinned = sqlite3_column_int(stmt, 14) != 0
+        let projectId = sqlite3_column_text(stmt, 15).map { String(cString: $0) }.flatMap { UUID(uuidString: $0) }
         return ChatSessionData(
             id: UUID(uuidString: idStr) ?? UUID(),
             title: title,
@@ -1333,7 +1391,8 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
             pinned: pinned,
             capabilities: SessionCapability.decode(capabilitiesRaw),
             folderBookmark: folderBookmark,
-            folderPath: folderPath
+            folderPath: folderPath,
+            projectId: projectId
         )
     }
 
