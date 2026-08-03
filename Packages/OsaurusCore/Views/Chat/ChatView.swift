@@ -357,6 +357,9 @@ final class ChatSession: ObservableObject {
     /// Mirrors `ChatSessionData.pinned`, for the same round-trip reason as
     /// `archived`.
     var pinned: Bool = false
+    /// Mirrors `ChatSessionData.projectId`, for the same round-trip reason
+    /// as `archived`.
+    var projectId: UUID?
 
     /// Tracks if session has unsaved content changes
     private var isDirty: Bool = false
@@ -2455,6 +2458,9 @@ final class ChatSession: ObservableObject {
         dispatchTaskId = nil
         archived = false
         pinned = false
+        // Cleared like the other per-session flags; the sidebar's New Chat
+        // path re-stamps the active project right after startNewChat().
+        projectId = nil
         isDirty = false
         // A new chat starts folder-less; the outgoing session's folder stays
         // persisted on its own row and does not leak into the fresh one.
@@ -2795,7 +2801,8 @@ final class ChatSession: ObservableObject {
             capabilities: SessionCapability.derive(from: turnData),
             folderBookmark: folderState.persistedBookmark,
             folderPath: folderState.persistedPath,
-            conversationSummary: conversationSummary
+            conversationSummary: conversationSummary,
+            projectId: projectId
         )
     }
 
@@ -2855,6 +2862,7 @@ final class ChatSession: ObservableObject {
         dispatchTaskId = data.dispatchTaskId
         archived = data.archived
         pinned = data.pinned
+        projectId = data.projectId
 
         // Restore THIS session's persisted folder (fire-and-forget: the
         // bookmark resolve + context build happen off the main actor and
@@ -7298,8 +7306,14 @@ struct ChatView: View {
                                 windowState.loadSession(data)
                                 isPinnedToBottom = true
                             },
-                            onNewChat: {
+                            onNewChat: { projectId in
                                 windowState.startNewChat()
+                                // A chat started under a project lens joins
+                                // that project; persisted with the first
+                                // turn's save via toSessionData().
+                                if let projectId {
+                                    session.projectId = projectId
+                                }
                             },
                             onDelete: { id in
                                 // Deleting a chat is an explicit destructive
@@ -7339,6 +7353,24 @@ struct ChatView: View {
                                 // next auto-save doesn't clobber the flag.
                                 if session.sessionId == id {
                                     session.pinned = pinned
+                                }
+                                windowState.refreshSessions()
+                            },
+                            onSetProject: { id, projectId in
+                                ChatSessionsManager.shared.setProject(id: id, projectId: projectId)
+                                // Keep the open view-model in sync so the
+                                // next auto-save doesn't clobber the move.
+                                if session.sessionId == id {
+                                    session.projectId = projectId
+                                }
+                                windowState.refreshSessions()
+                            },
+                            onDeleteProject: { id in
+                                ChatSessionsManager.shared.deleteProject(id: id)
+                                // The open chat may have been a member; its
+                                // next auto-save must not resurrect the id.
+                                if session.projectId == id {
+                                    session.projectId = nil
                                 }
                                 windowState.refreshSessions()
                             },

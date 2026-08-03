@@ -28,11 +28,18 @@ struct ChatSessionSidebar: View {
     let agentId: UUID
     let currentSessionId: UUID?
     let onSelect: (ChatSessionData) -> Void
-    let onNewChat: () -> Void
+    /// Start a new chat. The argument is the sidebar's selected project id
+    /// (nil when no project lens is active) so the fresh chat lands in the
+    /// project the user is currently looking at.
+    let onNewChat: (UUID?) -> Void
     let onDelete: (UUID) -> Void
     let onRename: (UUID, String) -> Void
     let onSetArchived: (UUID, Bool) -> Void
     let onSetPinned: (UUID, Bool) -> Void
+    /// Move a session into a project (nil = remove from its project).
+    let onSetProject: (UUID, UUID?) -> Void
+    /// Delete a project: detaches member sessions, then removes the record.
+    let onDeleteProject: (UUID) -> Void
     let onExport: (ChatSessionData, ExportFormat) -> Void
     /// Stop the live run driving the given session id. Rows only offer the
     /// control while `SessionActivityMonitor` reports the session active.
@@ -49,6 +56,7 @@ struct ChatSessionSidebar: View {
     @Environment(\.theme) private var theme
     @Environment(\.themedAlertScope) private var alertScope
     @ObservedObject private var agentManager = AgentManager.shared
+    @ObservedObject private var projectManager = ProjectManager.shared
     /// Live "session id → working / waiting for input" map. Drives the
     /// animated avatar ring, the status metadata line, the per-row Stop
     /// control, and floating active rows to the top of the list.
@@ -67,6 +75,10 @@ struct ChatSessionSidebar: View {
     @State private var searchQuery: String = ""
     @State private var sourceFilter: SourceFilter = .all
     @State private var hoveredFilter: SourceFilter?
+    /// Selected project lens. nil = all sessions regardless of project.
+    /// Composes with the source filter and search query.
+    @State private var projectFilter: UUID?
+    @State private var hoveredProjectChip: UUID?
     /// Sessions whose message bodies match the current search query,
     /// resolved asynchronously against the chat-history database (debounced
     /// per keystroke). Merged with the synchronous title/metadata matching in
@@ -114,16 +126,23 @@ struct ChatSessionSidebar: View {
 
     // MARK: - Computed Properties
 
-    /// Sessions after applying source/archive filter and search query.
+    /// Sessions after applying project lens, source/archive filter, and
+    /// search query.
     private var filteredSessions: [ChatSessionData] {
+        let scoped: [ChatSessionData]
+        if let projectFilter {
+            scoped = sessions.filter { $0.projectId == projectFilter }
+        } else {
+            scoped = sessions
+        }
         let byFilter: [ChatSessionData]
         switch sourceFilter {
         case .all:
-            byFilter = sessions.filter { !$0.archived }
+            byFilter = scoped.filter { !$0.archived }
         case .source(let s):
-            byFilter = sessions.filter { $0.source == s && !$0.archived }
+            byFilter = scoped.filter { $0.source == s && !$0.archived }
         case .archived:
-            byFilter = sessions.filter { $0.archived }
+            byFilter = scoped.filter { $0.archived }
         }
         guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else {
             return orderedForDisplay(byFilter)
@@ -204,6 +223,15 @@ struct ChatSessionSidebar: View {
             // Header with New Chat button
             sidebarHeader
 
+            // Project lens chips — shown once the user has created at
+            // least one project. Sits above search: the project is the
+            // outer scope everything below composes with.
+            if !projectManager.projects.isEmpty {
+                projectRail
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+            }
+
             // Search field
             SidebarSearchField(
                 text: $searchQuery,
@@ -266,8 +294,165 @@ struct ChatSessionSidebar: View {
             sourceFilter = .all
             searchQuery = ""
             hoveredFilter = nil
+            projectFilter = nil
             clearSelection()
         }
+    }
+
+    // MARK: - Project Rail
+
+    private var projectRail: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                projectChip(id: nil, name: nil)
+                ForEach(projectManager.projects) { project in
+                    projectChip(id: project.id, name: project.name)
+                        .contextMenu {
+                            Button {
+                                requestRenameProject(project)
+                            } label: {
+                                Text("Rename", bundle: .module)
+                            }
+                            Button(role: .destructive) {
+                                requestDeleteProject(project)
+                            } label: {
+                                Text("Delete", bundle: .module)
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    /// Capsule chip matching `sourceFilterChip`'s design language. A nil id
+    /// is the "All" lens; project names are user content, rendered verbatim.
+    private func projectChip(id: UUID?, name: String?) -> some View {
+        let isSelected = projectFilter == id
+        let isHovered = hoveredProjectChip == (id ?? Self.allProjectsHoverId)
+        let shape = Capsule(style: .continuous)
+        return Button {
+            withAnimation(theme.animationQuick()) {
+                projectFilter = id
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: id == nil ? "tray.full" : "folder.fill")
+                    .font(.system(size: 9.5, weight: .semibold))
+                if let name {
+                    Text(verbatim: name)
+                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                        .lineLimit(1)
+                } else {
+                    Text("All", bundle: .module)
+                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                }
+            }
+            .foregroundColor(isSelected ? theme.accentColor : theme.secondaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(shape.fill(chipFill(isSelected: isSelected, isHovered: isHovered)))
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            let key = id ?? Self.allProjectsHoverId
+            if hovering {
+                hoveredProjectChip = key
+            } else if hoveredProjectChip == key {
+                hoveredProjectChip = nil
+            }
+        }
+    }
+
+    /// Stable hover key for the "All" project chip, which has no project id.
+    private static let allProjectsHoverId = UUID()
+
+    // MARK: - Project CRUD
+
+    private func requestNewProject() {
+        presentProjectNamePrompt(
+            title: "New Project",
+            initialName: "",
+            submitLabel: "Create"
+        ) { name in
+            let project = ProjectManager.shared.create(name: name)
+            withAnimation(theme.animationQuick()) {
+                projectFilter = project.id
+            }
+        }
+    }
+
+    private func requestRenameProject(_ project: Project) {
+        presentProjectNamePrompt(
+            title: "Rename Project",
+            initialName: project.name,
+            submitLabel: "Save"
+        ) { name in
+            var updated = project
+            updated.name = name
+            ProjectManager.shared.update(updated)
+        }
+    }
+
+    private func presentProjectNamePrompt(
+        title: String,
+        initialName: String,
+        submitLabel: LocalizedStringKey,
+        onSubmit: @escaping (String) -> Void
+    ) {
+        let requestId = UUID()
+        let scope = alertScope
+        let sheet = ProjectNamePromptSheet(
+            initialName: initialName,
+            submitLabel: submitLabel
+        ) { name in
+            ThemedAlertCenter.shared.dismiss(scope: scope, id: requestId)
+            onSubmit(name)
+        }
+        ThemedAlertCenter.shared.present(
+            ThemedAlertRequest(
+                id: requestId,
+                title: title,
+                message: nil,
+                buttons: [.cancel(L("Cancel"))],
+                showsCloseButton: true,
+                customContent: AnyView(sheet),
+                width: 360,
+                onDismiss: {
+                    ThemedAlertCenter.shared.dismiss(scope: scope, id: requestId)
+                }
+            ),
+            scope: scope
+        )
+    }
+
+    /// Confirms, then detaches member chats and deletes the project.
+    /// Conversations themselves are never deleted by this flow.
+    private func requestDeleteProject(_ project: Project) {
+        let requestId = UUID()
+        let scope = alertScope
+        ThemedAlertCenter.shared.present(
+            ThemedAlertRequest(
+                id: requestId,
+                title: "Delete Project?",
+                message: L(
+                    "\"\(project.name)\" will be removed. Its conversations are kept and move out of the project."
+                ),
+                buttons: [
+                    .cancel(L("Cancel")),
+                    .destructive(L("Delete")) {
+                        if projectFilter == project.id {
+                            projectFilter = nil
+                        }
+                        onDeleteProject(project.id)
+                    },
+                ],
+                onDismiss: {
+                    ThemedAlertCenter.shared.dismiss(scope: scope, id: requestId)
+                }
+            ),
+            scope: scope
+        )
     }
 
     // MARK: - Source Filter Rail
@@ -510,6 +695,16 @@ struct ChatSessionSidebar: View {
             Spacer()
 
             Button {
+                requestNewProject()
+            } label: {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(theme.secondaryText)
+            }
+            .buttonStyle(.plain)
+            .localizedHelp("New Project")
+
+            Button {
                 requestImport()
             } label: {
                 Image(systemName: "square.and.arrow.down")
@@ -519,7 +714,7 @@ struct ChatSessionSidebar: View {
             .buttonStyle(.plain)
             .localizedHelp("Import Conversations")
 
-            Button(action: onNewChat) {
+            Button(action: { onNewChat(projectFilter) }) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(theme.secondaryText)
@@ -546,6 +741,26 @@ struct ChatSessionSidebar: View {
 
             Spacer(minLength: 4)
 
+            if !projectManager.projects.isEmpty {
+                Menu {
+                    moveToProjectButtons(currentProjectId: nil) { projectId in
+                        moveSelected(to: projectId)
+                    }
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(theme.secondaryText)
+                        .frame(width: SidebarStyle.actionButtonSize, height: SidebarStyle.actionButtonSize)
+                        .background(
+                            RoundedRectangle(cornerRadius: SidebarStyle.actionButtonCornerRadius, style: .continuous)
+                                .fill(theme.secondaryBackground.opacity(0.5))
+                        )
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .localizedHelp("Move to Project")
+            }
             selectionBarButton(icon: "archivebox", help: "Archive", tint: theme.secondaryText) {
                 archiveSelected()
             }
@@ -585,6 +800,42 @@ struct ChatSessionSidebar: View {
     }
 
     // MARK: - Batch Operations
+
+    /// Shared "move to project" menu items: one row per project plus a
+    /// trailing "Remove from Project". `currentProjectId` marks the checked
+    /// row when the menu acts on a single session (nil for batch menus).
+    @ViewBuilder
+    func moveToProjectButtons(
+        currentProjectId: UUID?,
+        onMove: @escaping (UUID?) -> Void
+    ) -> some View {
+        ForEach(projectManager.projects) { project in
+            Button {
+                onMove(project.id)
+            } label: {
+                if project.id == currentProjectId {
+                    Label { Text(verbatim: project.name) } icon: { Image(systemName: "checkmark") }
+                } else {
+                    Text(verbatim: project.name)
+                }
+            }
+        }
+        Divider()
+        Button {
+            onMove(nil)
+        } label: {
+            Text("Remove from Project", bundle: .module)
+        }
+    }
+
+    /// Moves every selected session into `projectId` and clears the
+    /// selection. Non-destructive, so no confirm.
+    private func moveSelected(to projectId: UUID?) {
+        for id in selectedIds {
+            onSetProject(id, projectId)
+        }
+        clearSelection()
+    }
 
     /// Archives every selected session (idempotent per row) and clears the
     /// selection. Archiving is non-destructive, so it skips the confirm.
@@ -712,6 +963,10 @@ struct ChatSessionSidebar: View {
                             onTogglePin: {
                                 onSetPinned(session.id, !session.pinned)
                             },
+                            projects: projectManager.projects,
+                            onSetProject: { projectId in
+                                onSetProject(session.id, projectId)
+                            },
                             onExport: { format in
                                 onExport(session, format)
                             },
@@ -773,6 +1028,10 @@ private struct SessionRow: View {
     let onDelete: () -> Void
     let onToggleArchive: () -> Void
     let onTogglePin: () -> Void
+    /// Projects available as move targets. Empty hides the move menu.
+    var projects: [Project] = []
+    /// Move this session into a project (nil = remove from its project).
+    var onSetProject: ((UUID?) -> Void)? = nil
     let onExport: (ChatSessionSidebar.ExportFormat) -> Void
     /// Stop this row's live run. Only rendered while `activityStatus` is set.
     var onStop: (() -> Void)? = nil
@@ -958,6 +1217,13 @@ private struct SessionRow: View {
                 Button(action: onTogglePin) {
                     Text(session.pinned ? "Unpin" : "Pin", bundle: .module)
                 }
+                if !projects.isEmpty, let onSetProject {
+                    Menu {
+                        moveToProjectItems(onMove: onSetProject)
+                    } label: {
+                        Text("Move to Project", bundle: .module)
+                    }
+                }
                 Divider()
                 Button(action: requestExport) { Text("Export…", bundle: .module) }
                 Divider()
@@ -965,6 +1231,33 @@ private struct SessionRow: View {
                     Text(session.archived ? "Unarchive" : "Archive", bundle: .module)
                 }
                 Button(role: .destructive, action: requestDelete) { Text("Delete", bundle: .module) }
+            }
+        }
+    }
+
+    // MARK: - Move to Project
+
+    /// Menu rows for moving this session: one per project (checkmark on the
+    /// current one) plus "Remove from Project" when the session is in one.
+    @ViewBuilder
+    private func moveToProjectItems(onMove: @escaping (UUID?) -> Void) -> some View {
+        ForEach(projects) { project in
+            Button {
+                onMove(project.id)
+            } label: {
+                if project.id == session.projectId {
+                    Label { Text(verbatim: project.name) } icon: { Image(systemName: "checkmark") }
+                } else {
+                    Text(verbatim: project.name)
+                }
+            }
+        }
+        if session.projectId != nil {
+            Divider()
+            Button {
+                onMove(nil)
+            } label: {
+                Text("Remove from Project", bundle: .module)
             }
         }
     }
@@ -984,6 +1277,30 @@ private struct SessionRow: View {
             ) {
                 showActionsPopover = false
                 onTogglePin()
+            }
+            if !projects.isEmpty, let onSetProject {
+                Menu {
+                    moveToProjectItems(onMove: { projectId in
+                        showActionsPopover = false
+                        onSetProject(projectId)
+                    })
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 11, weight: .medium))
+                            .frame(width: 14)
+                        Text("Move to Project", bundle: .module)
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundColor(theme.primaryText)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
             }
             Divider().padding(.vertical, 2)
             ActionsPopoverButton(icon: "square.and.arrow.up", label: "Export…", isDestructive: false) {
@@ -1462,11 +1779,13 @@ private struct DontAskAgainToggle: View {
                 agentId: Agent.defaultId,
                 currentSessionId: nil,
                 onSelect: { _ in },
-                onNewChat: {},
+                onNewChat: { _ in },
                 onDelete: { _ in },
                 onRename: { _, _ in },
                 onSetArchived: { _, _ in },
                 onSetPinned: { _, _ in },
+                onSetProject: { _, _ in },
+                onDeleteProject: { _ in },
                 onExport: { _, _ in }
             )
             .frame(height: 400)
