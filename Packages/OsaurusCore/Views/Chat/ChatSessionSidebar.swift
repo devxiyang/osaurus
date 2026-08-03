@@ -313,6 +313,12 @@ struct ChatSessionSidebar: View {
                             } label: {
                                 Text("Rename", bundle: .module)
                             }
+                            Button {
+                                requestEditProjectInstructions(project)
+                            } label: {
+                                Text("Edit Instructions…", bundle: .module)
+                            }
+                            Divider()
                             Button(role: .destructive) {
                                 requestDeleteProject(project)
                             } label: {
@@ -418,6 +424,36 @@ struct ChatSessionSidebar: View {
                 showsCloseButton: true,
                 customContent: AnyView(sheet),
                 width: 360,
+                onDismiss: {
+                    ThemedAlertCenter.shared.dismiss(scope: scope, id: requestId)
+                }
+            ),
+            scope: scope
+        )
+    }
+
+    /// Edits the project's shared instructions (prepended to the system
+    /// prompt of every chat in the project).
+    private func requestEditProjectInstructions(_ project: Project) {
+        let requestId = UUID()
+        let scope = alertScope
+        let sheet = ProjectInstructionsSheet(
+            initialInstructions: project.instructions
+        ) { instructions in
+            ThemedAlertCenter.shared.dismiss(scope: scope, id: requestId)
+            var updated = project
+            updated.instructions = instructions
+            ProjectManager.shared.update(updated)
+        }
+        ThemedAlertCenter.shared.present(
+            ThemedAlertRequest(
+                id: requestId,
+                title: "Project Instructions",
+                message: nil,
+                buttons: [.cancel(L("Cancel"))],
+                showsCloseButton: true,
+                customContent: AnyView(sheet),
+                width: 440,
                 onDismiss: {
                     ThemedAlertCenter.shared.dismiss(scope: scope, id: requestId)
                 }

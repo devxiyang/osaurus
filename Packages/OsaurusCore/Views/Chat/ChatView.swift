@@ -5162,6 +5162,20 @@ final class ChatSession: ObservableObject {
                         sys = sys.isEmpty ? pluginInstructions : sys + "\n\n" + pluginInstructions
                     }
 
+                    // Shared project context: a chat that belongs to a
+                    // project carries the project's instructions on every
+                    // turn. Constant per session (like plugin instructions),
+                    // so the KV prefix stays stable across turns.
+                    if !isRemoteAgentTarget, let pid = projectId,
+                        let project = ProjectManager.shared.project(for: pid)
+                    {
+                        let instructions = project.instructions
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !instructions.isEmpty {
+                            sys += "\n\n## Project: \(project.name)\n\n\(instructions)"
+                        }
+                    }
+
                     // Inject the one-off skill the user selected via slash
                     // command (resolved above, before compose, so the tools it
                     // references made it into the schema).
