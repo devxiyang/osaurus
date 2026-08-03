@@ -819,23 +819,30 @@ struct ChatSessionSidebar: View {
                 .localizedHelp("New Project")
             }
 
-            Button {
-                requestImport()
-            } label: {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
+            // Import lives on the Chats tab only; New Chat additionally
+            // stays available while drilled into a project (it creates the
+            // chat inside that project).
+            if selectedTab == .chats {
+                Button {
+                    requestImport()
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .localizedHelp("Import Conversations")
             }
-            .buttonStyle(.plain)
-            .localizedHelp("Import Conversations")
 
-            Button(action: { onNewChat(projectFilter) }) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
+            if selectedTab == .chats || projectFilter != nil {
+                Button(action: { onNewChat(projectFilter) }) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .localizedHelp("New Chat")
             }
-            .buttonStyle(.plain)
-            .localizedHelp("New Chat")
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
