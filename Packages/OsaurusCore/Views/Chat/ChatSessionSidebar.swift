@@ -75,10 +75,17 @@ struct ChatSessionSidebar: View {
     @State private var searchQuery: String = ""
     @State private var sourceFilter: SourceFilter = .all
     @State private var hoveredFilter: SourceFilter?
-    /// Selected project lens. nil = all sessions regardless of project.
-    /// Composes with the source filter and search query.
+    /// Top-level sidebar lens: the flat chat list or the project browser.
+    @State private var selectedTab: SidebarTab = .chats
+    /// Project drill-in on the Projects tab. nil shows the project list;
+    /// set, it scopes the session list to that project (composing with the
+    /// source filter and search query, like the Chats tab).
     @State private var projectFilter: UUID?
-    @State private var hoveredProjectChip: UUID?
+
+    enum SidebarTab: Hashable {
+        case chats
+        case projects
+    }
     /// Sessions whose message bodies match the current search query,
     /// resolved asynchronously against the chat-history database (debounced
     /// per keystroke). Merged with the synchronous title/metadata matching in
@@ -223,63 +230,74 @@ struct ChatSessionSidebar: View {
             // Header with New Chat button
             sidebarHeader
 
-            // Project lens chips — shown once the user has created at
-            // least one project. Sits above search: the project is the
-            // outer scope everything below composes with.
-            if !projectManager.projects.isEmpty {
-                projectRail
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-            }
+            // Chats | Projects lens switcher.
+            sidebarTabBar
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
 
-            // Search field
-            SidebarSearchField(
-                text: $searchQuery,
-                placeholder: "Search conversations...",
-                isFocused: $isSearchFocused,
-                isSearching: isContentSearchInFlight
-            )
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
-
-            // Source filter chips — always visible while the agent has
-            // any session, so the user can never "lose" the rail just
-            // by selecting a filter (or by drilling into a single-source
-            // agent via loadSession). The chip set itself still hides
-            // sources the agent has never used.
-            if !sessions.isEmpty {
-                sourceFilterRail
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-            }
-
-            Divider()
-                .opacity(0.3)
-
-            // Batch action bar for the current multi-selection.
-            if !selectedIds.isEmpty {
-                selectionActionBar
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            // Session list
-            if sessions.isEmpty {
-                emptyState
-            } else if filteredSessions.isEmpty, isContentSearchInFlight {
-                // The async content lookup hasn't finished — don't claim
-                // "no results" until the whole search process is complete.
-                searchingPlaceholder
-            } else if filteredSessions.isEmpty {
-                SidebarNoResultsView(searchQuery: searchQuery) {
-                    withAnimation(theme.animationQuick()) {
-                        searchQuery = ""
-                        sourceFilter = .all
-                    }
-                }
+            if selectedTab == .projects, projectFilter == nil {
+                // Project browser: one row per project; tap to drill in.
+                projectListView
             } else {
-                sessionList
+                // Drilled into a project: name + back affordance above the
+                // shared search/filter/list pipeline.
+                if selectedTab == .projects,
+                    let project = projectManager.project(for: projectFilter)
+                {
+                    projectDrillHeader(project)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 6)
+                }
+
+                // Search field
+                SidebarSearchField(
+                    text: $searchQuery,
+                    placeholder: "Search conversations...",
+                    isFocused: $isSearchFocused,
+                    isSearching: isContentSearchInFlight
+                )
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+
+                // Source filter chips — always visible while the agent has
+                // any session, so the user can never "lose" the rail just
+                // by selecting a filter (or by drilling into a single-source
+                // agent via loadSession). The chip set itself still hides
+                // sources the agent has never used.
+                if !sessions.isEmpty {
+                    sourceFilterRail
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 6)
+                }
+
+                Divider()
+                    .opacity(0.3)
+
+                // Batch action bar for the current multi-selection.
+                if !selectedIds.isEmpty {
+                    selectionActionBar
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                // Session list
+                if sessions.isEmpty {
+                    emptyState
+                } else if filteredSessions.isEmpty, isContentSearchInFlight {
+                    // The async content lookup hasn't finished — don't claim
+                    // "no results" until the whole search process is complete.
+                    searchingPlaceholder
+                } else if filteredSessions.isEmpty {
+                    SidebarNoResultsView(searchQuery: searchQuery) {
+                        withAnimation(theme.animationQuick()) {
+                            searchQuery = ""
+                            sourceFilter = .all
+                        }
+                    }
+                } else {
+                    sessionList
+                }
             }
         }
         // Adopting a new agent (via the dropdown's switchAgent or the
@@ -295,83 +313,142 @@ struct ChatSessionSidebar: View {
             searchQuery = ""
             hoveredFilter = nil
             projectFilter = nil
+            selectedTab = .chats
+            clearSelection()
+        }
+        // Switching lenses is a context change like an agent switch: the
+        // inner filter/search/selection state belongs to the previous lens.
+        .onChange(of: selectedTab) { _, _ in
+            sourceFilter = .all
+            searchQuery = ""
+            hoveredFilter = nil
+            projectFilter = nil
             clearSelection()
         }
     }
 
-    // MARK: - Project Rail
+    // MARK: - Tab Bar
 
-    private var projectRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                projectChip(id: nil, name: nil)
-                ForEach(projectManager.projects) { project in
-                    projectChip(id: project.id, name: project.name)
-                        .contextMenu {
-                            Button {
-                                requestRenameProject(project)
-                            } label: {
-                                Text("Rename", bundle: .module)
-                            }
-                            Button {
-                                requestEditProjectInstructions(project)
-                            } label: {
-                                Text("Edit Instructions…", bundle: .module)
-                            }
-                            Divider()
-                            Button(role: .destructive) {
-                                requestDeleteProject(project)
-                            } label: {
-                                Text("Delete", bundle: .module)
-                            }
-                        }
-                }
-            }
+    /// Two-segment lens switcher styled like the source filter chips:
+    /// equal-width segments, accent-tinted when selected.
+    private var sidebarTabBar: some View {
+        HStack(spacing: 4) {
+            tabSegment(.chats, label: "Chats", icon: "bubble.left.and.bubble.right")
+            tabSegment(.projects, label: "Projects", icon: "folder")
         }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(theme.secondaryBackground.opacity(theme.isDark ? 0.4 : 0.5))
+        )
     }
 
-    /// Capsule chip matching `sourceFilterChip`'s design language. A nil id
-    /// is the "All" lens; project names are user content, rendered verbatim.
-    private func projectChip(id: UUID?, name: String?) -> some View {
-        let isSelected = projectFilter == id
-        let isHovered = hoveredProjectChip == (id ?? Self.allProjectsHoverId)
-        let shape = Capsule(style: .continuous)
+    private func tabSegment(_ tab: SidebarTab, label: String, icon: String) -> some View {
+        let isSelected = selectedTab == tab
         return Button {
             withAnimation(theme.animationQuick()) {
-                projectFilter = id
+                selectedTab = tab
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: id == nil ? "tray.full" : "folder.fill")
-                    .font(.system(size: 9.5, weight: .semibold))
-                if let name {
-                    Text(verbatim: name)
-                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                        .lineLimit(1)
-                } else {
-                    Text("All", bundle: .module)
-                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                }
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(LocalizedStringKey(label), bundle: .module)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
             }
             .foregroundColor(isSelected ? theme.accentColor : theme.secondaryText)
-            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
             .padding(.vertical, 5)
-            .background(shape.fill(chipFill(isSelected: isSelected, isHovered: isHovered)))
-            .contentShape(shape)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? theme.accentColor.opacity(theme.isDark ? 0.28 : 0.18) : .clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            let key = id ?? Self.allProjectsHoverId
-            if hovering {
-                hoveredProjectChip = key
-            } else if hoveredProjectChip == key {
-                hoveredProjectChip = nil
+    }
+
+    // MARK: - Project List
+
+    /// The Projects tab's top level: one row per project. Tapping a row
+    /// drills into that project's chats.
+    private var projectListView: some View {
+        Group {
+            if projectManager.projects.isEmpty {
+                VStack(spacing: 8) {
+                    Spacer()
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 28))
+                        .foregroundColor(theme.secondaryText.opacity(0.5))
+                    Text("No projects yet", bundle: .module)
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.secondaryText.opacity(0.7))
+                    Button {
+                        requestNewProject()
+                    } label: {
+                        Text("New Project", bundle: .module)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(theme.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(projectManager.projects) { project in
+                            ProjectRow(
+                                project: project,
+                                sessionCount: sessions.filter { $0.projectId == project.id }.count,
+                                onOpen: {
+                                    withAnimation(theme.animationQuick()) {
+                                        projectFilter = project.id
+                                    }
+                                },
+                                onRename: { requestRenameProject(project) },
+                                onEditInstructions: { requestEditProjectInstructions(project) },
+                                onDelete: { requestDeleteProject(project) }
+                            )
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
+                }
+                .scrollIndicators(.hidden)
             }
         }
     }
 
-    /// Stable hover key for the "All" project chip, which has no project id.
-    private static let allProjectsHoverId = UUID()
+    /// Header shown while drilled into a project: back chevron + name.
+    private func projectDrillHeader(_ project: Project) -> some View {
+        HStack(spacing: 6) {
+            Button {
+                withAnimation(theme.animationQuick()) {
+                    projectFilter = nil
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(theme.secondaryText)
+                    .frame(width: SidebarStyle.actionButtonSize, height: SidebarStyle.actionButtonSize)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .localizedHelp("Back")
+
+            Image(systemName: "folder.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(theme.accentColor)
+
+            Text(verbatim: project.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(theme.primaryText)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+    }
 
     // MARK: - Project CRUD
 
@@ -730,15 +807,17 @@ struct ChatSessionSidebar: View {
 
             Spacer()
 
-            Button {
-                requestNewProject()
-            } label: {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
+            if selectedTab == .projects {
+                Button {
+                    requestNewProject()
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .localizedHelp("New Project")
             }
-            .buttonStyle(.plain)
-            .localizedHelp("New Project")
 
             Button {
                 requestImport()
@@ -1033,6 +1112,81 @@ struct ChatSessionSidebar: View {
                     proxy.scrollTo(target.id, anchor: .center)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Project Row
+
+/// Row in the Projects tab's top-level list. Mirrors `SessionRow`'s hover
+/// and background treatment; the trailing count keeps membership glanceable.
+private struct ProjectRow: View {
+    let project: Project
+    let sessionCount: Int
+    let onOpen: () -> Void
+    let onRename: () -> Void
+    let onEditInstructions: () -> Void
+    let onDelete: () -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(theme.accentColor.opacity(theme.isDark ? 0.16 : 0.12))
+                    .frame(width: 24, height: 24)
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(theme.accentColor)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: project.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(theme.primaryText)
+                    .lineLimit(1)
+                if !project.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Has instructions", bundle: .module)
+                        .font(.system(size: 10))
+                        .foregroundColor(theme.secondaryText.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Text(verbatim: "\(sessionCount)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(theme.secondaryText)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(theme.secondaryText.opacity(theme.isDark ? 0.16 : 0.12))
+                )
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(theme.secondaryText.opacity(isHovered ? 0.9 : 0.5))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(SidebarRowBackground(isSelected: false, isHovered: isHovered))
+        .clipShape(RoundedRectangle(cornerRadius: SidebarStyle.rowCornerRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: SidebarStyle.rowCornerRadius, style: .continuous))
+        .onTapGesture(perform: onOpen)
+        .onHover { hovering in
+            withAnimation(theme.springAnimation(responseMultiplier: 0.8)) {
+                isHovered = hovering
+            }
+        }
+        .contextMenu {
+            Button(action: onRename) { Text("Rename", bundle: .module) }
+            Button(action: onEditInstructions) { Text("Edit Instructions…", bundle: .module) }
+            Divider()
+            Button(role: .destructive, action: onDelete) { Text("Delete", bundle: .module) }
         }
     }
 }
