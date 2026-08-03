@@ -99,6 +99,11 @@ struct ProjectDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.primaryBackground)
         .onAppear { syncDraft() }
+        // The knowledge registry loads lazily off-main (launch-hang fix);
+        // in a chat window this page may be its first consumer, so settle
+        // it here or the Knowledge section stays hidden behind an empty
+        // `collections`.
+        .task { await knowledgeManager.ensureLoaded() }
         // Same view instance can be repointed at another project (sidebar
         // click while the page is open) — reload the draft for the new one.
         .onChange(of: project.id) { _, _ in syncDraft() }
