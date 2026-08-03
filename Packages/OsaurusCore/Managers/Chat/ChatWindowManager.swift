@@ -1119,7 +1119,11 @@ private struct ChatToolbarActionView: View {
     @ObservedObject var windowState: ChatWindowState
 
     var body: some View {
-        ChatToolbarActionContent(windowState: windowState, session: windowState.session)
+        // New-chat/plus is chat chrome; the project page has its own
+        // New Chat entry point.
+        if !windowState.isProjectPageVisible {
+            ChatToolbarActionContent(windowState: windowState, session: windowState.session)
+        }
     }
 }
 
