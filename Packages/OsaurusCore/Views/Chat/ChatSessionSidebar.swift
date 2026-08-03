@@ -1315,28 +1315,12 @@ private struct SessionRow: View {
                 onTogglePin()
             }
             if !projects.isEmpty, let onSetProject {
-                Menu {
+                ActionsPopoverMenu(icon: "folder", label: "Move to Project") {
                     moveToProjectItems(onMove: { projectId in
                         showActionsPopover = false
                         onSetProject(projectId)
                     })
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 11, weight: .medium))
-                            .frame(width: 14)
-                        Text("Move to Project", bundle: .module)
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer(minLength: 0)
-                    }
-                    .foregroundColor(theme.primaryText)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
             }
             Divider().padding(.vertical, 2)
             ActionsPopoverButton(icon: "square.and.arrow.up", label: "Export…", isDestructive: false) {
@@ -1683,6 +1667,46 @@ private struct ActionsPopoverButton: View {
     private var hoverFill: Color {
         if isDestructive { return Color.red.opacity(0.12) }
         return theme.accentColor.opacity(0.12)
+    }
+}
+
+// MARK: - Actions Popover Menu
+
+/// Submenu row for the actions popover, visually identical to
+/// `ActionsPopoverButton` (same metrics, hover fill, and accent-on-hover
+/// foreground) but hosting a `Menu` instead of a plain button.
+private struct ActionsPopoverMenu<Content: View>: View {
+    let icon: String
+    let label: String
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu(content: content) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .medium))
+                    .frame(width: 14)
+                Text(LocalizedStringKey(label), bundle: .module)
+                    .font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(isHovered ? theme.accentColor : theme.primaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? theme.accentColor.opacity(0.12) : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
