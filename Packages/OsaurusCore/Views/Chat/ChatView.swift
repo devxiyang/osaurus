@@ -7676,6 +7676,11 @@ struct ChatView: View {
             )
         )
         .ignoresSafeArea()
+        // Mirror the project page's visibility onto the window state so the
+        // toolbar (agent pill, window pin) can hide chat-only chrome.
+        .onChange(of: openProjectId) { _, newValue in
+            windowState.isProjectPageVisible = newValue != nil
+        }
         .onReceive(NotificationCenter.default.publisher(for: .chatOverlayActivated)) { _ in
             // Lightweight state updates only - refreshAll() removed to prevent excessive re-renders
             focusTrigger &+= 1

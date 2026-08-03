@@ -57,6 +57,11 @@ final class ChatWindowState: ObservableObject {
 
     @Published var showSidebar: Bool = false
 
+    /// True while the content area shows a project detail page instead of
+    /// the chat surface. Set by `ChatView`; read by the toolbar item views
+    /// so chat-specific chrome (agent pill, window pin) hides with it.
+    @Published var isProjectPageVisible: Bool = false
+
     /// Drives the "a local model is already running in another window" alert
     /// raised when the user tries to start a second local generation. Only one
     /// local generation can run at a time across windows; the alert is

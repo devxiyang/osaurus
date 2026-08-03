@@ -1028,6 +1028,16 @@ private struct ChatToolbarAgentView: View {
     @State private var openPickerTrigger: Int = 0
 
     var body: some View {
+        // The agent pill switches the CHAT's agent; on the project page it
+        // is meaningless (projects group chats across agents) and hides.
+        if windowState.isProjectPageVisible {
+            EmptyView()
+        } else {
+            agentPill
+        }
+    }
+
+    private var agentPill: some View {
         AgentPill(
             agents: windowState.agents,
             activeAgentId: windowState.agentId,
@@ -1197,8 +1207,12 @@ private struct ChatToolbarPinView: View {
     @ObservedObject var windowState: ChatWindowState
 
     var body: some View {
-        PinButton(windowId: windowState.windowId)
-            .environment(\.theme, windowState.theme)
+        // Window pinning is chat chrome; it has no meaning on the project
+        // detail page.
+        if !windowState.isProjectPageVisible {
+            PinButton(windowId: windowState.windowId)
+                .environment(\.theme, windowState.theme)
+        }
     }
 }
 
