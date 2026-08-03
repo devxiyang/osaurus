@@ -1078,6 +1078,9 @@ private struct SessionRow: View {
     @Environment(\.themedAlertScope) private var alertScope
     @State private var isHovered = false
     @State private var showActionsPopover = false
+    /// Drill-in page state for the actions popover: false shows the main
+    /// action list, true shows the project picker rows.
+    @State private var showProjectPicker = false
     /// Local buffer for the rename TextField. Kept on the row (not the
     /// sidebar) so focus churn during popover dismissal cannot desync it
     /// from the focused row.
@@ -1188,7 +1191,12 @@ private struct SessionRow: View {
                     SidebarRowActionButton(
                         icon: "ellipsis",
                         help: "Actions",
-                        action: { showActionsPopover.toggle() }
+                        action: {
+                            // Always reopen on the main page, not a stale
+                            // project-picker drill-in from last time.
+                            showProjectPicker = false
+                            showActionsPopover.toggle()
+                        }
                     )
                     .popover(isPresented: $showActionsPopover, arrowEdge: .trailing) {
                         actionsPopover
@@ -1300,7 +1308,55 @@ private struct SessionRow: View {
 
     // MARK: - Actions Popover
 
+    @ViewBuilder
     private var actionsPopover: some View {
+        if showProjectPicker {
+            projectPickerPopoverPage
+        } else {
+            mainActionsPopoverPage
+        }
+    }
+
+    /// Second page of the actions popover: one row per project, plus
+    /// "Remove from Project" and a back row. Same `ActionsPopoverButton`
+    /// styling as the main page.
+    private var projectPickerPopoverPage: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ActionsPopoverButton(icon: "chevron.left", label: "Back", isDestructive: false) {
+                showProjectPicker = false
+            }
+            Divider().padding(.vertical, 2)
+            ForEach(projects) { project in
+                ActionsPopoverButton(
+                    icon: project.id == session.projectId ? "checkmark" : "folder",
+                    label: project.name,
+                    labelIsVerbatim: true,
+                    isDestructive: false
+                ) {
+                    dismissProjectPicker()
+                    onSetProject?(project.id)
+                }
+            }
+            if session.projectId != nil {
+                Divider().padding(.vertical, 2)
+                ActionsPopoverButton(
+                    icon: "folder.badge.minus", label: "Remove from Project", isDestructive: false
+                ) {
+                    dismissProjectPicker()
+                    onSetProject?(nil)
+                }
+            }
+        }
+        .padding(6)
+        .frame(minWidth: 180)
+    }
+
+    private func dismissProjectPicker() {
+        showProjectPicker = false
+        showActionsPopover = false
+    }
+
+    private var mainActionsPopoverPage: some View {
         VStack(alignment: .leading, spacing: 2) {
             ActionsPopoverButton(icon: "pencil", label: "Rename", isDestructive: false) {
                 showActionsPopover = false
@@ -1314,12 +1370,9 @@ private struct SessionRow: View {
                 showActionsPopover = false
                 onTogglePin()
             }
-            if !projects.isEmpty, let onSetProject {
-                ActionsPopoverMenu(icon: "folder", label: "Move to Project") {
-                    moveToProjectItems(onMove: { projectId in
-                        showActionsPopover = false
-                        onSetProject(projectId)
-                    })
+            if !projects.isEmpty, onSetProject != nil {
+                ActionsPopoverButton(icon: "folder", label: "Move to Project", isDestructive: false) {
+                    showProjectPicker = true
                 }
             }
             Divider().padding(.vertical, 2)
@@ -1629,6 +1682,9 @@ private struct SessionRow: View {
 private struct ActionsPopoverButton: View {
     let icon: String
     let label: String
+    /// True when `label` is user content (e.g. a project name) that must
+    /// render verbatim instead of through the localization table.
+    var labelIsVerbatim: Bool = false
     let isDestructive: Bool
     let action: () -> Void
 
@@ -1641,8 +1697,15 @@ private struct ActionsPopoverButton: View {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .medium))
                     .frame(width: 14)
-                Text(LocalizedStringKey(label), bundle: .module)
-                    .font(.system(size: 12, weight: .medium))
+                Group {
+                    if labelIsVerbatim {
+                        Text(verbatim: label)
+                    } else {
+                        Text(LocalizedStringKey(label), bundle: .module)
+                    }
+                }
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
                 Spacer(minLength: 0)
             }
             .foregroundColor(foreground)
@@ -1667,46 +1730,6 @@ private struct ActionsPopoverButton: View {
     private var hoverFill: Color {
         if isDestructive { return Color.red.opacity(0.12) }
         return theme.accentColor.opacity(0.12)
-    }
-}
-
-// MARK: - Actions Popover Menu
-
-/// Submenu row for the actions popover, visually identical to
-/// `ActionsPopoverButton` (same metrics, hover fill, and accent-on-hover
-/// foreground) but hosting a `Menu` instead of a plain button.
-private struct ActionsPopoverMenu<Content: View>: View {
-    let icon: String
-    let label: String
-    @ViewBuilder let content: () -> Content
-
-    @Environment(\.theme) private var theme
-    @State private var isHovered = false
-
-    var body: some View {
-        Menu(content: content) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .medium))
-                    .frame(width: 14)
-                Text(LocalizedStringKey(label), bundle: .module)
-                    .font(.system(size: 12, weight: .medium))
-                Spacer(minLength: 0)
-            }
-            .foregroundColor(isHovered ? theme.accentColor : theme.primaryText)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovered ? theme.accentColor.opacity(0.12) : .clear)
-            )
-            .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
     }
 }
 
