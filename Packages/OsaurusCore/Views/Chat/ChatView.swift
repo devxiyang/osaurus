@@ -6834,6 +6834,11 @@ struct ChatView: View {
 
     @State private var focusTrigger: Int = 0
     @State private var isPinnedToBottom: Bool = true
+    /// Project whose detail page is shown in the content area (opened from
+    /// the sidebar's Projects tab). nil shows the normal chat surface.
+    @State private var openProjectId: UUID?
+    /// Observed so project renames/edits re-render the open detail page.
+    @ObservedObject private var projectManager = ProjectManager.shared
     @State private var scrollToBottomTrigger: Int = 0
     @State private var keyMonitor: Any?
     // Inline editing state
@@ -7317,12 +7322,14 @@ struct ChatView: View {
                             agentId: windowState.agentId,
                             currentSessionId: session.sessionId,
                             onSelect: { data in
+                                openProjectId = nil
                                 windowState.loadSession(data)
                                 isPinnedToBottom = true
                             },
                             onNewChat: { projectId in
+                                openProjectId = nil
                                 windowState.startNewChat()
-                                // A chat started under a project lens joins
+                                // A chat started from a project's page joins
                                 // that project; persisted with the first
                                 // turn's save via toSessionData().
                                 if let projectId {
@@ -7386,7 +7393,13 @@ struct ChatView: View {
                                 if session.projectId == id {
                                     session.projectId = nil
                                 }
+                                if openProjectId == id {
+                                    openProjectId = nil
+                                }
                                 windowState.refreshSessions()
+                            },
+                            onOpenProject: { project in
+                                openProjectId = project.id
                             },
                             onExport: { metadata, format in
                                 ChatSessionExportCoordinator.run(
@@ -7604,7 +7617,41 @@ struct ChatView: View {
                         }
                     }
                     .animation(theme.springAnimation(responseMultiplier: 0.9), value: session.hasVisibleThreadMessages)
+
+                    // Project detail page, shown over the chat surface while
+                    // a project is open from the sidebar's Projects tab.
+                    // Opaque and full-size so the chat beneath neither shows
+                    // nor receives events.
+                    if let project = projectManager.project(for: openProjectId) {
+                        ProjectDetailView(
+                            project: project,
+                            onOpenSession: { data in
+                                openProjectId = nil
+                                windowState.loadSession(data)
+                                isPinnedToBottom = true
+                            },
+                            onNewChat: {
+                                openProjectId = nil
+                                windowState.startNewChat()
+                                session.projectId = project.id
+                            },
+                            onClose: {
+                                openProjectId = nil
+                            },
+                            onDelete: {
+                                ChatSessionsManager.shared.deleteProject(id: project.id)
+                                if session.projectId == project.id {
+                                    session.projectId = nil
+                                }
+                                openProjectId = nil
+                                windowState.refreshSessions()
+                            }
+                        )
+                        .transition(.opacity)
+                        .zIndex(2)
+                    }
                 }
+                .animation(theme.animationQuick(), value: openProjectId)
             }
         }
         // Allow the window to narrow down to 550pt so it tiles comfortably

@@ -40,6 +40,8 @@ struct ChatSessionSidebar: View {
     let onSetProject: (UUID, UUID?) -> Void
     /// Delete a project: detaches member sessions, then removes the record.
     let onDeleteProject: (UUID) -> Void
+    /// Open a project's detail page in the window's content area.
+    var onOpenProject: ((Project) -> Void)? = nil
     let onExport: (ChatSessionData, ExportFormat) -> Void
     /// Stop the live run driving the given session id. Rows only offer the
     /// control while `SessionActivityMonitor` reports the session active.
@@ -77,10 +79,6 @@ struct ChatSessionSidebar: View {
     @State private var hoveredFilter: SourceFilter?
     /// Top-level sidebar lens: the flat chat list or the project browser.
     @State private var selectedTab: SidebarTab = .chats
-    /// Project drill-in on the Projects tab. nil shows the project list;
-    /// set, it scopes the session list to that project (composing with the
-    /// source filter and search query, like the Chats tab).
-    @State private var projectFilter: UUID?
 
     enum SidebarTab: Hashable {
         case chats
@@ -133,23 +131,16 @@ struct ChatSessionSidebar: View {
 
     // MARK: - Computed Properties
 
-    /// Sessions after applying project lens, source/archive filter, and
-    /// search query.
+    /// Sessions after applying source/archive filter and search query.
     private var filteredSessions: [ChatSessionData] {
-        let scoped: [ChatSessionData]
-        if let projectFilter {
-            scoped = sessions.filter { $0.projectId == projectFilter }
-        } else {
-            scoped = sessions
-        }
         let byFilter: [ChatSessionData]
         switch sourceFilter {
         case .all:
-            byFilter = scoped.filter { !$0.archived }
+            byFilter = sessions.filter { !$0.archived }
         case .source(let s):
-            byFilter = scoped.filter { $0.source == s && !$0.archived }
+            byFilter = sessions.filter { $0.source == s && !$0.archived }
         case .archived:
-            byFilter = scoped.filter { $0.archived }
+            byFilter = sessions.filter { $0.archived }
         }
         guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else {
             return orderedForDisplay(byFilter)
@@ -235,20 +226,11 @@ struct ChatSessionSidebar: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
 
-            if selectedTab == .projects, projectFilter == nil {
-                // Project browser: one row per project; tap to drill in.
+            if selectedTab == .projects {
+                // Project browser: one row per project; opening one shows
+                // the project detail page in the window's content area.
                 projectListView
             } else {
-                // Drilled into a project: name + back affordance above the
-                // shared search/filter/list pipeline.
-                if selectedTab == .projects,
-                    let project = projectManager.project(for: projectFilter)
-                {
-                    projectDrillHeader(project)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 6)
-                }
-
                 // Search field
                 SidebarSearchField(
                     text: $searchQuery,
@@ -312,7 +294,6 @@ struct ChatSessionSidebar: View {
             sourceFilter = .all
             searchQuery = ""
             hoveredFilter = nil
-            projectFilter = nil
             selectedTab = .chats
             clearSelection()
         }
@@ -322,7 +303,6 @@ struct ChatSessionSidebar: View {
             sourceFilter = .all
             searchQuery = ""
             hoveredFilter = nil
-            projectFilter = nil
             clearSelection()
         }
     }
@@ -402,9 +382,7 @@ struct ChatSessionSidebar: View {
                                 project: project,
                                 sessionCount: sessions.filter { $0.projectId == project.id }.count,
                                 onOpen: {
-                                    withAnimation(theme.animationQuick()) {
-                                        projectFilter = project.id
-                                    }
+                                    onOpenProject?(project)
                                 },
                                 onRename: { requestRenameProject(project) },
                                 onEditInstructions: { requestEditProjectInstructions(project) },
@@ -420,36 +398,6 @@ struct ChatSessionSidebar: View {
         }
     }
 
-    /// Header shown while drilled into a project: back chevron + name.
-    private func projectDrillHeader(_ project: Project) -> some View {
-        HStack(spacing: 6) {
-            Button {
-                withAnimation(theme.animationQuick()) {
-                    projectFilter = nil
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: SidebarStyle.actionButtonSize, height: SidebarStyle.actionButtonSize)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .localizedHelp("Back")
-
-            Image(systemName: "folder.fill")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(theme.accentColor)
-
-            Text(verbatim: project.name)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(theme.primaryText)
-                .lineLimit(1)
-
-            Spacer(minLength: 0)
-        }
-    }
-
     // MARK: - Project CRUD
 
     private func requestNewProject() {
@@ -459,9 +407,8 @@ struct ChatSessionSidebar: View {
             submitLabel: "Create"
         ) { name in
             let project = ProjectManager.shared.create(name: name)
-            withAnimation(theme.animationQuick()) {
-                projectFilter = project.id
-            }
+            // Land the user straight on the fresh project's page.
+            onOpenProject?(project)
         }
     }
 
@@ -554,9 +501,6 @@ struct ChatSessionSidebar: View {
                 buttons: [
                     .cancel(L("Cancel")),
                     .destructive(L("Delete")) {
-                        if projectFilter == project.id {
-                            projectFilter = nil
-                        }
                         onDeleteProject(project.id)
                     },
                 ],
@@ -834,8 +778,8 @@ struct ChatSessionSidebar: View {
                 .localizedHelp("Import Conversations")
             }
 
-            if selectedTab == .chats || projectFilter != nil {
-                Button(action: { onNewChat(projectFilter) }) {
+            if selectedTab == .chats {
+                Button(action: { onNewChat(nil) }) {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(theme.secondaryText)
