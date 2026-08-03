@@ -26,9 +26,49 @@ struct ProjectDetailView: View {
     /// drives the Save button's visibility.
     @State private var instructionsDraft: String = ""
     @State private var loadedProjectId: UUID?
+    @State private var searchQuery: String = ""
+    @FocusState private var isSearchFocused: Bool
+    /// Member session ids whose message bodies match the query, resolved
+    /// asynchronously against the chat-history database (debounced per
+    /// keystroke), mirroring the sidebar's content search.
+    @State private var contentMatchedSessionIds: Set<UUID> = []
+    @State private var contentSearchTask: Task<Void, Never>?
+    @State private var isContentSearchInFlight: Bool = false
 
     private var memberSessions: [ChatSessionData] {
         sessionsManager.sessions.filter { $0.projectId == project.id && !$0.archived }
+    }
+
+    /// Members after applying the search query (title + full-text content).
+    private var visibleSessions: [ChatSessionData] {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return memberSessions }
+        return memberSessions.filter { session in
+            SearchService.matches(query: trimmed, in: session.title)
+                || contentMatchedSessionIds.contains(session.id)
+        }
+    }
+
+    /// Debounced full-text lookup, same contract as the sidebar's: the
+    /// in-memory sessions are metadata-only, so content matching goes to
+    /// the chat-history database.
+    private func scheduleContentSearch(_ query: String) {
+        contentSearchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            contentMatchedSessionIds = []
+            isContentSearchInFlight = false
+            return
+        }
+        isContentSearchInFlight = true
+        contentSearchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            let ids = await ChatSessionStore.sessionIds(withContentContaining: trimmed)
+            guard !Task.isCancelled else { return }
+            contentMatchedSessionIds = ids
+            isContentSearchInFlight = false
+        }
     }
 
     private var hasEdits: Bool {
@@ -62,6 +102,10 @@ struct ProjectDetailView: View {
         guard loadedProjectId != project.id else { return }
         loadedProjectId = project.id
         instructionsDraft = project.instructions
+        searchQuery = ""
+        contentSearchTask?.cancel()
+        contentMatchedSessionIds = []
+        isContentSearchInFlight = false
     }
 
     // MARK: - Header
@@ -174,6 +218,18 @@ struct ProjectDetailView: View {
                 .buttonStyle(.plain)
             }
 
+            if !memberSessions.isEmpty {
+                SidebarSearchField(
+                    text: $searchQuery,
+                    placeholder: "Search conversations...",
+                    isFocused: $isSearchFocused,
+                    isSearching: isContentSearchInFlight
+                )
+                .onChange(of: searchQuery) { _, query in
+                    scheduleContentSearch(query)
+                }
+            }
+
             if memberSessions.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "bubble.left.and.bubble.right")
@@ -185,9 +241,26 @@ struct ProjectDetailView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
+            } else if visibleSessions.isEmpty, isContentSearchInFlight {
+                // Don't claim "no matches" while the async content lookup
+                // is still running.
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Searching conversations…", bundle: .module)
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.secondaryText.opacity(0.8))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            } else if visibleSessions.isEmpty {
+                Text("No matches found", bundle: .module)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.secondaryText.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
             } else {
                 VStack(spacing: 2) {
-                    ForEach(memberSessions) { session in
+                    ForEach(visibleSessions) { session in
                         ProjectConversationRow(session: session) {
                             onOpenSession(session)
                         }
