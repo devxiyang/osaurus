@@ -358,8 +358,9 @@ final class ChatSession: ObservableObject {
     /// `archived`.
     var pinned: Bool = false
     /// Mirrors `ChatSessionData.projectId`, for the same round-trip reason
-    /// as `archived`.
-    var projectId: UUID?
+    /// as `archived`. Published because the toolbar's back-to-project
+    /// button shows/hides with it across chat switches.
+    @Published var projectId: UUID?
 
     /// Tracks if session has unsaved content changes
     private var isDirty: Bool = false
@@ -7998,23 +7999,6 @@ struct ChatView: View {
                     }
                     .animation(theme.springAnimation(responseMultiplier: 0.9), value: session.hasVisibleThreadMessages)
 
-                    // Back-to-project chip: a chat that belongs to a project
-                    // offers a way back to its project page. Sits just below
-                    // the toolbar strip (the top ~52pt swallows clicks) and
-                    // hides while the project page itself is up.
-                    if openProjectId == nil,
-                        let backProject = projectManager.project(for: session.projectId)
-                    {
-                        ProjectBackChip(project: backProject) {
-                            openProjectId = backProject.id
-                        }
-                        .padding(.leading, 14)
-                        .padding(.top, 56)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .transition(.opacity)
-                        .zIndex(1)
-                    }
-
                     // Project detail page, shown over the chat surface while
                     // a project is open from the sidebar's Projects tab.
                     // Opaque and full-size so the chat beneath neither shows
@@ -8074,6 +8058,12 @@ struct ChatView: View {
         // toolbar (agent pill, window pin) can hide chat-only chrome.
         .onChange(of: openProjectId) { _, newValue in
             windowState.isProjectPageVisible = newValue != nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .chatToolbarBackToProject)) { notification in
+            guard let targetWindowId = notification.userInfo?["windowId"] as? UUID,
+                targetWindowId == windowState.windowId
+            else { return }
+            openProjectId = session.projectId
         }
         .onReceive(NotificationCenter.default.publisher(for: .chatOverlayActivated)) { _ in
             // Lightweight state updates only - refreshAll() removed to prevent excessive re-renders

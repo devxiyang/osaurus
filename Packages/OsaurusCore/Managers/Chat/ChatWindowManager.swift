@@ -911,6 +911,7 @@ private struct ChatFullScreenHeaderView: View {
         ZStack {
             HStack(spacing: 8) {
                 ChatToolbarSidebarView(windowState: windowState)
+                ChatToolbarBackView(windowState: windowState)
                 Spacer()
                 ChatToolbarActionView(windowState: windowState)
                 ChatToolbarPinView(windowState: windowState)
@@ -941,6 +942,7 @@ private final class ChatPanel: NSPanel {
 @MainActor
 private final class ChatToolbarDelegate: NSObject, NSToolbarDelegate {
     fileprivate static let sidebarItem = NSToolbarItem.Identifier("ChatToolbar.sidebar")
+    fileprivate static let backItem = NSToolbarItem.Identifier("ChatToolbar.back")
     fileprivate static let agentItem = NSToolbarItem.Identifier("ChatToolbar.agent")
     fileprivate static let actionItem = NSToolbarItem.Identifier("ChatToolbar.action")
     fileprivate static let pinItem = NSToolbarItem.Identifier("ChatToolbar.pin")
@@ -952,7 +954,7 @@ private final class ChatToolbarDelegate: NSObject, NSToolbarDelegate {
     /// fall through to `default: nil` in `itemForItemIdentifier`, which
     /// renders them as no-ops rather than crashing.
     private static let itemIdentifiers: [NSToolbarItem.Identifier] = [
-        sidebarItem, .flexibleSpace, agentItem, .flexibleSpace, actionItem, pinItem,
+        sidebarItem, backItem, .flexibleSpace, agentItem, .flexibleSpace, actionItem, pinItem,
     ]
 
     private weak var windowState: ChatWindowState?
@@ -983,6 +985,13 @@ private final class ChatToolbarDelegate: NSObject, NSToolbarDelegate {
                 identifier: itemIdentifier,
                 rootView:
                     ChatToolbarSidebarView(windowState: windowState)
+            )
+
+        case Self.backItem:
+            return makeHostingItem(
+                identifier: itemIdentifier,
+                rootView:
+                    ChatToolbarBackView(windowState: windowState)
             )
 
         case Self.agentItem:
@@ -1131,10 +1140,51 @@ private struct ChatToolbarAgentView: View {
 
 extension Notification.Name {
     static let chatToolbarSelectDiscoveredAgent = Notification.Name("chatToolbarSelectDiscoveredAgent")
+    /// Posted by the toolbar's back button to reopen the current chat's
+    /// project page in the window identified by `userInfo["windowId"]`.
+    static let chatToolbarBackToProject = Notification.Name("chatToolbarBackToProject")
     static let chatToolbarSelectRelayAgent = Notification.Name("chatToolbarSelectRelayAgent")
     /// Posted by the `/agent` slash command to pop open the toolbar's agent
     /// picker for the window identified in `userInfo["windowId"]`.
     static let chatToolbarOpenAgentPicker = Notification.Name("chatToolbarOpenAgentPicker")
+}
+
+/// Back button beside the sidebar toggle: shown while the current chat
+/// belongs to a project (and the project page itself is not up); returns to
+/// that project's detail page. Split into outer/inner views for the same
+/// session-replacement reason as `ChatToolbarActionView` below.
+private struct ChatToolbarBackView: View {
+    @ObservedObject var windowState: ChatWindowState
+
+    var body: some View {
+        ChatToolbarBackContent(windowState: windowState, session: windowState.session)
+    }
+}
+
+private struct ChatToolbarBackContent: View {
+    @ObservedObject var windowState: ChatWindowState
+    @ObservedObject var session: ChatSession
+    @ObservedObject private var projectManager = ProjectManager.shared
+
+    var body: some View {
+        if !windowState.isProjectPageVisible,
+            let projectId = session.projectId,
+            projectManager.project(for: projectId) != nil
+        {
+            HeaderActionButton(
+                icon: "chevron.left",
+                help: "Back to project",
+                action: {
+                    NotificationCenter.default.post(
+                        name: .chatToolbarBackToProject,
+                        object: nil,
+                        userInfo: ["windowId": windowState.windowId]
+                    )
+                }
+            )
+            .environment(\.theme, windowState.theme)
+        }
+    }
 }
 
 /// Contextual action button: new-chat plus once a conversation exists.
