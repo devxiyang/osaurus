@@ -911,7 +911,7 @@ private struct ChatFullScreenHeaderView: View {
         ZStack {
             HStack(spacing: 8) {
                 ChatToolbarSidebarView(windowState: windowState)
-                ChatToolbarBackView(windowState: windowState)
+                ChatToolbarBackView(windowState: windowState, sidebarOpenInset: 192)
                 Spacer()
                 ChatToolbarActionView(windowState: windowState)
                 ChatToolbarPinView(windowState: windowState)
@@ -1155,15 +1155,23 @@ extension Notification.Name {
 /// session-replacement reason as `ChatToolbarActionView` below.
 private struct ChatToolbarBackView: View {
     @ObservedObject var windowState: ChatWindowState
+    /// Leading inset applied while the sidebar is open so the button lands
+    /// at the CONTENT area's top-left instead of over the sidebar. Differs
+    /// between the NSToolbar (traffic lights + toggle item precede it) and
+    /// the full-screen header (no traffic lights).
+    var sidebarOpenInset: CGFloat = 132
 
     var body: some View {
-        ChatToolbarBackContent(windowState: windowState, session: windowState.session)
+        ChatToolbarBackContent(
+            windowState: windowState, session: windowState.session,
+            sidebarOpenInset: sidebarOpenInset)
     }
 }
 
 private struct ChatToolbarBackContent: View {
     @ObservedObject var windowState: ChatWindowState
     @ObservedObject var session: ChatSession
+    var sidebarOpenInset: CGFloat = 132
     @ObservedObject private var projectManager = ProjectManager.shared
 
     var body: some View {
@@ -1182,6 +1190,12 @@ private struct ChatToolbarBackContent: View {
                     )
                 }
             )
+            // Anchor to the CONTENT area's top-left, not the window's:
+            // with the sidebar open, the un-padded item would sit over the
+            // sidebar beside its toggle. The inset ≈ sidebar width (240)
+            // minus what precedes this item on the leading edge.
+            .padding(.leading, windowState.showSidebar ? sidebarOpenInset : 0)
+            .animation(windowState.theme.animationQuick(), value: windowState.showSidebar)
             .environment(\.theme, windowState.theme)
         }
     }
