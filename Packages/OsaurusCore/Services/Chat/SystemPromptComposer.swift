@@ -1472,6 +1472,10 @@ public struct SystemPromptComposer: Sendable {
         if !imessage.readableChatIds.isEmpty || !imessage.writableChatIds.isEmpty {
             return true
         }
+        let whatsapp = WhatsAppConnectionService.shared.configuration()
+        if !whatsapp.readableChatIds.isEmpty || !whatsapp.writableChatIds.isEmpty {
+            return true
+        }
         return false
     }
 
@@ -2503,6 +2507,7 @@ public struct SystemPromptComposer: Sendable {
             snapshot: snapshot,
             config: SubagentConfigurationStore.snapshot(),
             hasReadyImageModel: imageCache.hasReadyImageModel,
+            hasReadyVideoModel: imageCache.hasReadyVideoGenerationModel,
             // AppleScript gates like image: the per-agent / global switch can be
             // on, but the tool stays hidden until a curated AppleScript model is
             // installed. Read off the same warmed picker cache.

@@ -136,9 +136,30 @@ let package = Package(
         // vmlx-swift#186-#188 correct FalconH1 key
         // projection scaling, prefixed output-head loading, and gated RMSNorm
         // group normalization without changing the shared unload/cache APIs.
+        // vmlx-swift#210 round-trips LFM2/LFM2.5 short-conv prefix-cache
+        // state: the v2 disk payload persists the single occupied MambaCache
+        // slot (a stateless tagged mamba layer is an atomic required miss,
+        // retiring KV-only pseudo-hits), the paged companion rail recovers
+        // per-layer arity so 1-slot conv layers no longer cross-wire, and
+        // LFM2Configuration reads stock intermediate_size configs. It also
+        // pins the LFM2.5-2.6B template ({% generation %}, Pythonic tool
+        // envelope, unconditional <think> generation prompt) and the
+        // qwen3-reasoning + lfm2-tool capability stamp resolution.
+        // vmlx-swift#211 advances LFM2/LFM2.5 short-conv cache offsets each
+        // forward so the #208 boundary-offset guard admits the family's
+        // paged/disk stores instead of vetoing every one (conv layers were
+        // stuck at offset 0; observed live as zero kv_v2 entries).
+        // vmlx-swift#212 honors DSV4's bundle thinking default (absent
+        // enable_thinking = thinking rail), publishes the N-1 disk seed for
+        // reusable-prefix warmups on the solo path (a DSV4 warmup otherwise
+        // published nothing and the visible send re-prefilled the identical
+        // prefix), aligns the post-answer boundary key with the consumed
+        // stop token the async pipeline already forwarded, and hardens SSD
+        // q8 pool blocks (empty-pool round-trip, non-q8 poison-to-miss,
+        // atomic .qkv record refusal).
         .package(
             url: "https://github.com/osaurus-ai/vmlx-swift",
-            revision: "8e2c3d6ebca6a43be6a516eb3dc55ef49c174a5d"
+            revision: "5052be1ad6fdecdbc0da111abf8db5744894d17a"
         ),
         // FluidAudio 0.14.3 added a breaking `language:` parameter to TTS
         // calls that osaurus's `TTSService` doesn't pass. Pinning to the

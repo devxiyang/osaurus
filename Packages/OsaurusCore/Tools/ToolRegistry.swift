@@ -250,6 +250,9 @@ public final class ToolRegistry: ObservableObject {
             // → edit). Tool body enforces the separate Agent Delegation permission
             // defaults and low-RAM unload policy.
             ImageTool(),
+            // Billable remote text/image-to-video generation. The subagent kind
+            // obtains a live quote before permission and persists queued jobs.
+            VideoTool(),
             // Agent DB feature (spec §6). The system prompt composer
             // gates these per-agent via `Agent.settings.dbEnabled`;
             // registering them as built-ins means agents that *do*
@@ -368,6 +371,8 @@ public final class ToolRegistry: ObservableObject {
         AgentChannelIMessageSendEffectTool(),
         AgentChannelIMessageCreatePollTool(),
         AgentChannelIMessageManageGroupTool(),
+        // WhatsApp-only media send; same family-wide external deny list.
+        AgentChannelWhatsAppSendAttachmentTool(),
         // Proactive, binding-scoped publish. Joins the family deny list
         // below automatically, so it can never run from external surfaces.
         AgentChannelPublishTool(),
@@ -393,6 +398,7 @@ public final class ToolRegistry: ObservableObject {
         "agent_channel_imessage_send_effect",
         "agent_channel_imessage_create_poll",
         "agent_channel_imessage_manage_group",
+        "agent_channel_whatsapp_send_attachment",
         "agent_channel_publish",
     ]
 
@@ -871,11 +877,21 @@ public final class ToolRegistry: ObservableObject {
                 && (ChatExecutionContext.currentAgentId != Agent.defaultId
                     || Self.configureWriteToolNames.contains(name))
             if loadGateAllows, loadableCodes.isSuperset(of: toolAvailability.reasonCodes) {
+                // Name the loader tool this request actually exposes. Chat
+                // surfaces publish the merged `capabilities` gateway and NOT
+                // the legacy `capabilities_load`, so hinting the legacy name
+                // sends the model straight into a second tool_not_found dead
+                // end (#2279). Fall back to `capabilities` when neither is in
+                // scope — it is the only loader small models can discover.
+                let loaderName =
+                    scope.permits("capabilities")
+                    ? "capabilities"
+                    : (scope.permits("capabilities_load") ? "capabilities_load" : "capabilities")
                 return ToolErrorEnvelope(
                     kind: .toolNotFound,
                     reason:
                         "\(name) exists but is not loaded in this conversation. "
-                        + "Call capabilities_load with ids: [\"tool/\(name)\"] to load it, "
+                        + "Call \(loaderName) with ids: [\"tool/\(name)\"] to load it, "
                         + "then retry this call.",
                     toolName: name,
                     retryable: true
@@ -1890,6 +1906,9 @@ public final class ToolRegistry: ObservableObject {
     /// Image-family tool names, derived from the capability registry.
     static var agentDelegationImageToolNames: Set<String> {
         Set(SubagentCapabilityRegistry.image.toolNames)
+    }
+    static var agentDelegationVideoToolNames: Set<String> {
+        Set(SubagentCapabilityRegistry.video.toolNames)
     }
     /// AppleScript-family tool names, derived from the capability registry.
     static var agentDelegationAppleScriptToolNames: Set<String> {

@@ -152,6 +152,13 @@ public enum SettingsSearchIndex {
             keywords: ["title", "auto title", "rename", "chat name", "summary"]
         ),
         .init(
+            id: "settings.chat.cmdNNewChat",
+            tab: .chat,
+            section: "Chat",
+            title: "⌘+N Starts a New Chat in the Current Window",
+            keywords: ["cmd n", "new chat", "shortcut", "keyboard", "new window", "hotkey"]
+        ),
+        .init(
             id: "settings.chat.compactionModel",
             tab: .chat,
             section: "Chat",
@@ -496,7 +503,7 @@ public enum SettingsSearchIndex {
             title: "Channels",
             keywords: [
                 "agent channels", "integrations", "channels", "discord", "slack", "telegram",
-                "imessage", "custom json", "custom http", "remote channel",
+                "imessage", "whatsapp", "custom json", "custom http", "remote channel",
             ]
         ),
         .init(
@@ -546,6 +553,18 @@ public enum SettingsSearchIndex {
                 "imessage", "messages app", "imessage chats", "full disk access",
                 "messages automation", "imsg helper", "sender allowlist",
                 "tapback", "unsend", "sip", "library validation",
+            ]
+        ),
+        .init(
+            id: "agentChannels.whatsapp",
+            tab: .agentChannels,
+            section: "Native Integrations",
+            title: "WhatsApp",
+            keywords: [
+                "whatsapp", "whatsapp web", "whatsapp qr code", "qr code", "link device",
+                "whatsmeow",
+                "osaurus-wa helper", "sender allowlist", "whatsapp chats",
+                "phone number", "group jid",
             ]
         ),
         .init(
