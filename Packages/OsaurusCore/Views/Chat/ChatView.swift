@@ -7998,6 +7998,23 @@ struct ChatView: View {
                     }
                     .animation(theme.springAnimation(responseMultiplier: 0.9), value: session.hasVisibleThreadMessages)
 
+                    // Back-to-project chip: a chat that belongs to a project
+                    // offers a way back to its project page. Sits just below
+                    // the toolbar strip (the top ~52pt swallows clicks) and
+                    // hides while the project page itself is up.
+                    if openProjectId == nil,
+                        let backProject = projectManager.project(for: session.projectId)
+                    {
+                        ProjectBackChip(project: backProject) {
+                            openProjectId = backProject.id
+                        }
+                        .padding(.leading, 14)
+                        .padding(.top, 56)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .transition(.opacity)
+                        .zIndex(1)
+                    }
+
                     // Project detail page, shown over the chat surface while
                     // a project is open from the sidebar's Projects tab.
                     // Opaque and full-size so the chat beneath neither shows

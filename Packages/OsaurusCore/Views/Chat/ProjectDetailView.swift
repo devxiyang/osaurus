@@ -398,6 +398,47 @@ struct ProjectDetailView: View {
     }
 }
 
+// MARK: - Back Chip
+
+/// Floating capsule shown at the top-leading of a chat that belongs to a
+/// project; clicking it returns to the project's detail page. Neutral chip
+/// colors warming to accent on hover, matching the toolbar chips.
+struct ProjectBackChip: View {
+    let project: Project
+    let action: () -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .semibold))
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 10, weight: .medium))
+                Text(verbatim: project.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundColor(isHovered ? theme.accentColor : theme.secondaryText)
+            .frame(height: 26)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: 220, alignment: .leading)
+            .background(
+                Capsule().fill(theme.tertiaryBackground.opacity(isHovered ? 1 : 0.7))
+            )
+            .overlay(
+                Capsule().stroke(theme.primaryBorder.opacity(0.4), lineWidth: 1)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(Text("Back to project", bundle: .module))
+    }
+}
+
 // MARK: - Conversation Row
 
 private struct ProjectConversationRow: View {
