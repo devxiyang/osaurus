@@ -177,7 +177,7 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
     /// stamped newer than this is refused (forward-version fail-fast).
     /// Internal (not private) so migration-repair tests assert "reconciled
     /// to the latest" against the real constant instead of a stale literal.
-    static let latestSchemaVersion = 14
+    static let latestSchemaVersion = 15
 
     private func runMigrations() throws {
         let current = try getSchemaVersion()
@@ -206,7 +206,7 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
         if current < 11 { try runMigrationStep(11, migrateToV11) }
         if current < 12 { try runMigrationStep(12, migrateToV12) }
         if current < 13 { try runMigrationStep(13, migrateToV13) }
-        if current < 14 { try runMigrationStep(14, migrateToV14) }
+        if current < 15 { try runMigrationStep(15, migrateToV15) }
     }
 
     /// Run one migration body atomically. Called only from `runMigrations`,
@@ -443,12 +443,20 @@ public final class ChatHistoryDatabase: @unchecked Sendable {
         try setSchemaVersion(13)
     }
 
-    /// v14: add `project_id` so sessions can be grouped under user-created
+    /// v15: add `project_id` so sessions can be grouped under user-created
     /// projects. Nullable — legacy rows belong to no project.
-    private func migrateToV14() throws {
+    ///
+    /// Numbered 15 (skipping 14) because main's v14 already shipped
+    /// `turns.shared_artifacts`; an earlier revision of this branch also
+    /// claimed 14 for `project_id`, so a database stamped 14 may carry
+    /// either column but not the other. Both adds are `addColumnIfMissing`,
+    /// so this step repairs whichever half is absent regardless of which
+    /// v14 the database actually ran.
+    private func migrateToV15() throws {
         try addColumnIfMissing("sessions", "project_id", "TEXT")
         try executeRaw("CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions (project_id)")
-        try setSchemaVersion(14)
+        try addColumnIfMissing("turns", "shared_artifacts", "TEXT")
+        try setSchemaVersion(15)
     }
 
     // MARK: - Public API: sessions
