@@ -354,6 +354,7 @@ struct ProjectDetailView: View {
                     isFocused: $isSearchFocused,
                     isSearching: isContentSearchInFlight
                 )
+                .padding(.vertical, 6)
                 .onChange(of: searchQuery) { _, query in
                     scheduleContentSearch(query)
                 }
@@ -390,9 +391,14 @@ struct ProjectDetailView: View {
             } else {
                 VStack(spacing: 2) {
                     ForEach(visibleSessions) { session in
-                        ProjectConversationRow(session: session) {
-                            onOpenSession(session)
-                        }
+                        ProjectConversationRow(
+                            session: session,
+                            onOpen: { onOpenSession(session) },
+                            onRemove: {
+                                ChatSessionsManager.shared.setProject(
+                                    id: session.id, projectId: nil)
+                            }
+                        )
                     }
                 }
             }
@@ -458,9 +464,12 @@ struct ProjectDetailView: View {
 private struct ProjectConversationRow: View {
     let session: ChatSessionData
     let onOpen: () -> Void
+    /// Detach this chat from the project (the chat itself is kept).
+    let onRemove: () -> Void
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
+    @State private var isRemoveHovered = false
 
     var body: some View {
         Button(action: onOpen) {
@@ -477,9 +486,17 @@ private struct ProjectConversationRow: View {
 
                 Spacer()
 
-                Text(verbatim: formatRelativeDate(session.updatedAt))
-                    .font(.system(size: 10))
-                    .foregroundColor(theme.secondaryText.opacity(0.85))
+                Button(action: onRemove) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(isRemoveHovered ? .red : theme.secondaryText)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .onHover { isRemoveHovered = $0 }
+                .localizedHelp("Remove from Project")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
