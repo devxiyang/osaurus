@@ -761,6 +761,7 @@ struct ChatSessionSidebar: View {
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.plain)
+                .pointingHandCursor()
                 .localizedHelp("New Project")
             }
 
@@ -776,6 +777,7 @@ struct ChatSessionSidebar: View {
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.plain)
+                .pointingHandCursor()
                 .localizedHelp("Import Conversations")
             }
 
@@ -786,6 +788,7 @@ struct ChatSessionSidebar: View {
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.plain)
+                .pointingHandCursor()
                 .localizedHelp("New Chat")
             }
         }
@@ -1835,7 +1838,7 @@ private struct ActionsPopoverButton: View {
     }
 
     private var foreground: Color {
-        if isDestructive { return isHovered ? .red : theme.primaryText }
+        if isDestructive { return .red }
         return isHovered ? theme.accentColor : theme.primaryText
     }
 

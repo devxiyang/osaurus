@@ -34,6 +34,7 @@ struct HeaderActionButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointingHandCursor()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
@@ -531,6 +532,7 @@ struct AgentPill: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointingHandCursor()
         .localizedHelp(isRemoteActive ? "Remote agent settings" : "Edit agent settings")
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
@@ -560,6 +562,7 @@ struct AgentPill: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointingHandCursor()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
