@@ -502,7 +502,8 @@ struct ProjectDetailView: View {
                     text: $searchQuery,
                     placeholder: "Search conversations...",
                     isFocused: $isSearchFocused,
-                    isSearching: isContentSearchInFlight
+                    isSearching: isContentSearchInFlight,
+                    showsRestingBorder: true
                 )
                 .padding(.vertical, 6)
                 .onChange(of: searchQuery) { _, query in
