@@ -325,10 +325,6 @@ struct ProjectDetailView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isSelected ? theme.accentColor.opacity(0.10) : .clear)
-            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
