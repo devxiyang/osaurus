@@ -18,6 +18,11 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
     /// Knowledge collections shared by all chats in this project. Merged
     /// with the agent's own `knowledgeCollectionIds` at request time.
     public var knowledgeCollectionIds: [UUID]
+    /// Agent that new chats started from this project's page use. nil (or a
+    /// since-deleted agent) → the window's current agent, as before. A
+    /// nudge toward one-agent projects, never a restriction: chats from any
+    /// agent can still be moved in.
+    public var defaultAgentId: UUID?
     public let createdAt: Date
     public var updatedAt: Date
 
@@ -26,6 +31,7 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
         name: String,
         instructions: String = "",
         knowledgeCollectionIds: [UUID] = [],
+        defaultAgentId: UUID? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -33,6 +39,7 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
         self.name = name
         self.instructions = instructions
         self.knowledgeCollectionIds = knowledgeCollectionIds
+        self.defaultAgentId = defaultAgentId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -44,11 +51,12 @@ public struct Project: Codable, Identifiable, Sendable, Equatable {
         instructions = try c.decodeIfPresent(String.self, forKey: .instructions) ?? ""
         knowledgeCollectionIds =
             try c.decodeIfPresent([UUID].self, forKey: .knowledgeCollectionIds) ?? []
+        defaultAgentId = try c.decodeIfPresent(UUID.self, forKey: .defaultAgentId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, instructions, knowledgeCollectionIds, createdAt, updatedAt
+        case id, name, instructions, knowledgeCollectionIds, defaultAgentId, createdAt, updatedAt
     }
 }

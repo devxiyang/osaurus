@@ -7706,7 +7706,9 @@ struct ChatView: View {
                             onNewChat: { projectId in
                                 openProjectId = nil
                                 windowState.enteredChatFromProjectPage = projectId != nil
-                                windowState.startNewChat()
+                                startProjectChat(
+                                    defaultAgentId: projectManager.project(for: projectId)?
+                                        .defaultAgentId)
                                 // A chat started from a project's page joins
                                 // that project; persisted with the first
                                 // turn's save via toSessionData().
@@ -8012,7 +8014,7 @@ struct ChatView: View {
                             onNewChat: {
                                 openProjectId = nil
                                 windowState.enteredChatFromProjectPage = true
-                                windowState.startNewChat()
+                                startProjectChat(defaultAgentId: project.defaultAgentId)
                                 session.projectId = project.id
                             },
                             onDelete: {
@@ -9210,6 +9212,21 @@ extension ChatView {
     // `.onExitCommand` machinery, so every state that should win over
     // "close window" must either be handled here or explicitly passed
     // through to the responder chain.
+    /// Start a fresh chat for a project, honoring its default agent when one
+    /// is set and still exists. `switchAgent` already installs a fresh
+    /// session for the target agent, so the two branches are equivalent
+    /// apart from the agent change.
+    private func startProjectChat(defaultAgentId: UUID?) {
+        if let defaultAgentId,
+            defaultAgentId != windowState.agentId,
+            windowState.agents.contains(where: { $0.id == defaultAgentId })
+        {
+            windowState.switchAgent(to: defaultAgentId)
+        } else {
+            windowState.startNewChat()
+        }
+    }
+
     private func setupKeyMonitor() {
         if keyMonitor != nil { return }
 

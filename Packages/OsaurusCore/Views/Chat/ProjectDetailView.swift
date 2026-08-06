@@ -23,6 +23,7 @@ struct ProjectDetailView: View {
     @Environment(\.themedAlertScope) private var alertScope
     @ObservedObject private var sessionsManager = ChatSessionsManager.shared
     @ObservedObject private var knowledgeManager = KnowledgeManager.shared
+    @ObservedObject private var agentManager = AgentManager.shared
     /// Draft of the instructions editor. Saved explicitly; `hasEdits`
     /// drives the Save button's visibility.
     @State private var instructionsDraft: String = ""
@@ -82,6 +83,7 @@ struct ProjectDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 instructionsSection
+                defaultAgentSection
                 knowledgeSection
                 conversationsSection
             }
@@ -216,6 +218,101 @@ struct ProjectDetailView: View {
     private func saveInstructions() {
         var updated = project
         updated.instructions = instructionsDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        ProjectManager.shared.update(updated)
+    }
+
+    // MARK: - Default Agent
+
+    /// Picker for the agent new chats in this project start with. A nudge
+    /// toward one-agent projects (shared memory, consistent capabilities),
+    /// never a restriction — chats from any agent can still be moved in.
+    private var defaultAgentSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Default Agent", bundle: .module)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(theme.primaryText)
+
+            Text("New chats started from this project use this agent.", bundle: .module)
+                .font(.system(size: 11))
+                .foregroundColor(theme.secondaryText)
+
+            Menu {
+                Button {
+                    setDefaultAgent(nil)
+                } label: {
+                    if project.defaultAgentId == nil {
+                        Label {
+                            Text("Current Agent", bundle: .module)
+                        } icon: {
+                            Image(systemName: "checkmark")
+                        }
+                    } else {
+                        Text("Current Agent", bundle: .module)
+                    }
+                }
+                Divider()
+                ForEach(agentManager.agents) { agent in
+                    Button {
+                        setDefaultAgent(agent.id)
+                    } label: {
+                        if project.defaultAgentId == agent.id {
+                            Label { Text(verbatim: agent.name) } icon: { Image(systemName: "checkmark") }
+                        } else {
+                            Text(verbatim: agent.name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if let agent = defaultAgent {
+                        AgentAvatarView(
+                            mascotId: agent.avatar,
+                            name: agent.name,
+                            tint: theme.accentColor,
+                            diameter: 18,
+                            customImageURL: agent.customAvatarURL,
+                            monogramFontSize: 8,
+                            borderWidth: 0
+                        )
+                        Text(verbatim: agent.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(theme.primaryText)
+                    } else {
+                        Image(systemName: "person.crop.circle.dashed")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(theme.secondaryText)
+                        Text("Current Agent", bundle: .module)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(theme.primaryText)
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(theme.secondaryBackground.opacity(theme.isDark ? 0.35 : 0.5))
+                )
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .pointingHandCursor()
+        }
+    }
+
+    /// The configured default agent, resolved defensively: a stale id
+    /// (agent deleted since) renders as "Current Agent".
+    private var defaultAgent: Agent? {
+        guard let id = project.defaultAgentId else { return nil }
+        return agentManager.agents.first { $0.id == id }
+    }
+
+    private func setDefaultAgent(_ agentId: UUID?) {
+        var updated = project
+        updated.defaultAgentId = agentId
         ProjectManager.shared.update(updated)
     }
 
@@ -481,16 +578,36 @@ private struct ProjectConversationRow: View {
     let onRemove: () -> Void
 
     @Environment(\.theme) private var theme
+    @ObservedObject private var agentManager = AgentManager.shared
     @State private var isHovered = false
     @State private var isRemoveHovered = false
+
+    /// The chat's agent, surfaced on the row because a project can mix
+    /// agents with different capabilities — the variance should be visible.
+    private var agent: Agent? {
+        guard let agentId = session.agentId else { return nil }
+        return agentManager.agents.first { $0.id == agentId }
+    }
 
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 10) {
-                Image(systemName: "bubble.left")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: 16)
+                if let agent {
+                    AgentAvatarView(
+                        mascotId: agent.avatar,
+                        name: agent.name,
+                        tint: theme.accentColor,
+                        diameter: 20,
+                        customImageURL: agent.customAvatarURL,
+                        monogramFontSize: 9,
+                        borderWidth: 0
+                    )
+                } else {
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                        .frame(width: 20)
+                }
 
                 Text(verbatim: session.title)
                     .font(.system(size: 12, weight: .medium))
@@ -498,6 +615,13 @@ private struct ProjectConversationRow: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                if let agent {
+                    Text(verbatim: agent.name)
+                        .font(.system(size: 10))
+                        .foregroundColor(theme.secondaryText.opacity(0.85))
+                        .lineLimit(1)
+                }
 
                 Button(action: onRemove) {
                     Image(systemName: "folder.badge.minus")
