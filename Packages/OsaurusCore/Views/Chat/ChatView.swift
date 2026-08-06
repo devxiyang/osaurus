@@ -8005,6 +8005,7 @@ struct ChatView: View {
                     if let project = projectManager.project(for: openProjectId) {
                         ProjectDetailView(
                             project: project,
+                            currentAgentId: windowState.agentId,
                             onOpenSession: { data in
                                 openProjectId = nil
                                 windowState.enteredChatFromProjectPage = true

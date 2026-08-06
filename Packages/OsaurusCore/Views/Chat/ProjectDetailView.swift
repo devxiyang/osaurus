@@ -11,6 +11,9 @@ import SwiftUI
 
 struct ProjectDetailView: View {
     let project: Project
+    /// The hosting window's active agent — the effective default when the
+    /// project hasn't pinned one.
+    let currentAgentId: UUID?
     /// Open a conversation (the host closes this page and loads it).
     let onOpenSession: (ChatSessionData) -> Void
     /// Start a new chat inside this project.
@@ -237,25 +240,11 @@ struct ProjectDetailView: View {
                 .foregroundColor(theme.secondaryText)
 
             Menu {
-                Button {
-                    setDefaultAgent(nil)
-                } label: {
-                    if project.defaultAgentId == nil {
-                        Label {
-                            Text("Current Agent", bundle: .module)
-                        } icon: {
-                            Image(systemName: "checkmark")
-                        }
-                    } else {
-                        Text("Current Agent", bundle: .module)
-                    }
-                }
-                Divider()
-                ForEach(agentManager.agents) { agent in
+                ForEach(selectableAgents) { agent in
                     Button {
                         setDefaultAgent(agent.id)
                     } label: {
-                        if project.defaultAgentId == agent.id {
+                        if agent.id == effectiveDefaultAgent?.id {
                             Label { Text(verbatim: agent.name) } icon: { Image(systemName: "checkmark") }
                         } else {
                             Text(verbatim: agent.name)
@@ -264,7 +253,7 @@ struct ProjectDetailView: View {
                 }
             } label: {
                 HStack(spacing: 8) {
-                    if let agent = defaultAgent {
+                    if let agent = effectiveDefaultAgent {
                         AgentAvatarView(
                             mascotId: agent.avatar,
                             name: agent.name,
@@ -274,40 +263,52 @@ struct ProjectDetailView: View {
                             monogramFontSize: 8,
                             borderWidth: 0
                         )
-                        Text(verbatim: agent.name)
+                        .frame(width: 18, height: 18)
+                        Text(verbatim: agent.displayName)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(theme.primaryText)
-                    } else {
-                        Image(systemName: "person.crop.circle.dashed")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(theme.secondaryText)
-                        Text("Current Agent", bundle: .module)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(theme.primaryText)
+                            .lineLimit(1)
                     }
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .medium))
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(theme.secondaryText)
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .frame(width: 240, height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(theme.secondaryBackground.opacity(theme.isDark ? 0.35 : 0.5))
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(theme.secondaryText.opacity(0.15), lineWidth: 1)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .fixedSize()
+            .frame(width: 240, alignment: .leading)
             .pointingHandCursor()
         }
     }
 
-    /// The configured default agent, resolved defensively: a stale id
-    /// (agent deleted since) renders as "Current Agent".
-    private var defaultAgent: Agent? {
-        guard let id = project.defaultAgentId else { return nil }
-        return agentManager.agents.first { $0.id == id }
+    /// Agents offered as project defaults: the built-in Osaurus setup agent
+    /// is excluded — it exists to configure the app, not to own project work.
+    private var selectableAgents: [Agent] {
+        agentManager.agents.filter { $0.id != Agent.defaultId }
+    }
+
+    /// What the dropdown shows ticked: the pinned default when set and
+    /// still existing, otherwise the hosting window's current agent.
+    private var effectiveDefaultAgent: Agent? {
+        if let id = project.defaultAgentId,
+            let pinned = agentManager.agents.first(where: { $0.id == id })
+        {
+            return pinned
+        }
+        guard let currentAgentId else { return nil }
+        return agentManager.agents.first { $0.id == currentAgentId }
     }
 
     private func setDefaultAgent(_ agentId: UUID?) {
@@ -592,22 +593,10 @@ private struct ProjectConversationRow: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 10) {
-                if let agent {
-                    AgentAvatarView(
-                        mascotId: agent.avatar,
-                        name: agent.name,
-                        tint: theme.accentColor,
-                        diameter: 20,
-                        customImageURL: agent.customAvatarURL,
-                        monogramFontSize: 9,
-                        borderWidth: 0
-                    )
-                } else {
-                    Image(systemName: "bubble.left")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(theme.secondaryText)
-                        .frame(width: 20)
-                }
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(theme.secondaryText)
+                    .frame(width: 16)
 
                 Text(verbatim: session.title)
                     .font(.system(size: 12, weight: .medium))
@@ -617,10 +606,21 @@ private struct ProjectConversationRow: View {
                 Spacer()
 
                 if let agent {
-                    Text(verbatim: agent.name)
-                        .font(.system(size: 10))
-                        .foregroundColor(theme.secondaryText.opacity(0.85))
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        AgentAvatarView(
+                            mascotId: agent.avatar,
+                            name: agent.name,
+                            tint: theme.accentColor,
+                            diameter: 16,
+                            customImageURL: agent.customAvatarURL,
+                            monogramFontSize: 8,
+                            borderWidth: 0
+                        )
+                        Text(verbatim: agent.name)
+                            .font(.system(size: 10))
+                            .foregroundColor(theme.secondaryText.opacity(0.85))
+                            .lineLimit(1)
+                    }
                 }
 
                 Button(action: onRemove) {
