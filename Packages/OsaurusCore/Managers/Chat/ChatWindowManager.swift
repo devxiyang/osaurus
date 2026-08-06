@@ -1174,22 +1174,43 @@ private struct ChatToolbarBackContent: View {
     var sidebarOpenInset: CGFloat = 104
     @ObservedObject private var projectManager = ProjectManager.shared
 
+    @State private var isHovered = false
+
     var body: some View {
         if !windowState.isProjectPageVisible,
             let projectId = session.projectId,
-            projectManager.project(for: projectId) != nil
+            let project = projectManager.project(for: projectId)
         {
-            HeaderActionButton(
-                icon: "chevron.left",
-                help: "Back to project",
-                action: {
-                    NotificationCenter.default.post(
-                        name: .chatToolbarBackToProject,
-                        object: nil,
-                        userInfo: ["windowId": windowState.windowId]
-                    )
+            Button(action: {
+                NotificationCenter.default.post(
+                    name: .chatToolbarBackToProject,
+                    object: nil,
+                    userInfo: ["windowId": windowState.windowId]
+                )
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .medium))
+                    Text(project.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 180, alignment: .leading)
                 }
-            )
+                .foregroundColor(isHovered ? windowState.theme.accentColor : windowState.theme.secondaryText)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .liquidGlassCapsule()
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.15)) {
+                    isHovered = hovering
+                }
+            }
+            .help(Text(LocalizedStringKey("Back to project"), bundle: .module))
             // Anchor to the CONTENT area's top-left, not the window's:
             // with the sidebar open, the un-padded item would sit over the
             // sidebar beside its toggle. The inset ≈ sidebar width (240)

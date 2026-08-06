@@ -54,6 +54,17 @@ extension View {
             self
         }
     }
+
+    /// Capsule variant of `liquidGlassCircle` for pill-shaped toolbar
+    /// buttons that carry a text label next to their icon.
+    @ViewBuilder
+    func liquidGlassCapsule() -> some View {
+        if #available(macOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            self
+        }
+    }
 }
 
 // MARK: - Settings Button
