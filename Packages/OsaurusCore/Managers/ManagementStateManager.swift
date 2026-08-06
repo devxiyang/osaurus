@@ -80,6 +80,11 @@ public final class ManagementStateManager: ObservableObject {
     /// `KnowledgeView` observes this and resets it to nil after applying.
     @Published public var pendingKnowledgeCreate: PendingKnowledgeCreateRequest?
 
+    /// One-shot request to open a specific collection's detail sheet on the
+    /// Knowledge tab — e.g. from a project page's knowledge row chevron.
+    /// `KnowledgeView` observes this and resets it to nil after applying.
+    @Published public var pendingKnowledgeDetailId: UUID?
+
     /// One-shot request to open the detail page for a specific paired remote
     /// agent (`RemoteAgent.id`) — e.g. from the chat empty-state gear button.
     /// `AgentsView` observes this and resets it to nil after applying.

@@ -301,6 +301,7 @@ struct KnowledgeView: View {
             }
             reloadCuration()
             applyPendingCreateRequest()
+            applyPendingDetailRequest()
         }
         // Deep link from the project page's Add Collection shortcut: pop the
         // create sheet directly instead of landing the user on the tab to
@@ -308,6 +309,14 @@ struct KnowledgeView: View {
         // for the case where the request is set before this view mounts.
         .onReceive(ManagementStateManager.shared.$pendingKnowledgeCreate) { pending in
             if pending != nil { applyPendingCreateRequest() }
+        }
+        .onReceive(ManagementStateManager.shared.$pendingKnowledgeDetailId) { pending in
+            if pending != nil { applyPendingDetailRequest() }
+        }
+        // The deep link can land before the lazily loaded registry has the
+        // collection; retry when collections settle.
+        .onReceive(knowledgeManager.$collections) { _ in
+            applyPendingDetailRequest()
         }
         // Self-healing refresh. The curation list is otherwise driven by
         // notifications + appear/window-key hooks, all of which are unreliable
@@ -323,6 +332,14 @@ struct KnowledgeView: View {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
+    }
+
+    private func applyPendingDetailRequest() {
+        guard let id = ManagementStateManager.shared.pendingKnowledgeDetailId,
+            let collection = knowledgeManager.collections.first(where: { $0.id == id })
+        else { return }
+        ManagementStateManager.shared.pendingKnowledgeDetailId = nil
+        detailCollection = collection
     }
 
     private func applyPendingCreateRequest() {

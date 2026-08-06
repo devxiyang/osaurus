@@ -304,6 +304,19 @@ struct ProjectDetailView: View {
                     .foregroundColor(theme.primaryText)
                     .lineLimit(1)
                 Spacer()
+                Button {
+                    ManagementStateManager.shared.pendingKnowledgeDetailId = collection.id
+                    AppDelegate.shared?.showManagementWindow(initialTab: .knowledge)
+                } label: {
+                    Image(systemName: "chevron.right.circle")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .localizedHelp("View collection details")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -487,7 +500,7 @@ private struct ProjectConversationRow: View {
                 Spacer()
 
                 Button(action: onRemove) {
-                    Image(systemName: "trash")
+                    Image(systemName: "folder.badge.minus")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(isRemoveHovered ? .red : theme.secondaryText)
                         .frame(width: 22, height: 22)
