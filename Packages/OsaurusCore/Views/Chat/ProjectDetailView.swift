@@ -39,6 +39,7 @@ struct ProjectDetailView: View {
     @State private var contentMatchedSessionIds: Set<UUID> = []
     @State private var contentSearchTask: Task<Void, Never>?
     @State private var isContentSearchInFlight: Bool = false
+    @State private var isAgentPickerPresented = false
 
     private var memberSessions: [ChatSessionData] {
         sessionsManager.sessions.filter { $0.projectId == project.id && !$0.archived }
@@ -239,18 +240,12 @@ struct ProjectDetailView: View {
                 .font(.system(size: 11))
                 .foregroundColor(theme.secondaryText)
 
-            Menu {
-                ForEach(selectableAgents) { agent in
-                    Button {
-                        setDefaultAgent(agent.id)
-                    } label: {
-                        if agent.id == effectiveDefaultAgent?.id {
-                            Label { Text(verbatim: agent.name) } icon: { Image(systemName: "checkmark") }
-                        } else {
-                            Text(verbatim: agent.name)
-                        }
-                    }
-                }
+            // Button + popover rather than Menu: macOS measures a Menu's
+            // label at its image's intrinsic size, which blows a resizable
+            // mascot up to full resolution regardless of frames (the agent
+            // pill avoids Menu for the same reason).
+            Button {
+                isAgentPickerPresented.toggle()
             } label: {
                 HStack(spacing: 8) {
                     if let agent = effectiveDefaultAgent {
@@ -263,7 +258,6 @@ struct ProjectDetailView: View {
                             monogramFontSize: 8,
                             borderWidth: 0
                         )
-                        .frame(width: 18, height: 18)
                         Text(verbatim: agent.displayName)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(theme.primaryText)
@@ -286,11 +280,58 @@ struct ProjectDetailView: View {
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 240, alignment: .leading)
+            .buttonStyle(.plain)
             .pointingHandCursor()
+            .popover(isPresented: $isAgentPickerPresented, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(selectableAgents) { agent in
+                        defaultAgentPickerRow(agent)
+                    }
+                }
+                .padding(6)
+                .frame(minWidth: 228)
+            }
         }
+    }
+
+    private func defaultAgentPickerRow(_ agent: Agent) -> some View {
+        let isSelected = agent.id == effectiveDefaultAgent?.id
+        return Button {
+            isAgentPickerPresented = false
+            setDefaultAgent(agent.id)
+        } label: {
+            HStack(spacing: 8) {
+                AgentAvatarView(
+                    mascotId: agent.avatar,
+                    name: agent.name,
+                    tint: theme.accentColor,
+                    diameter: 18,
+                    customImageURL: agent.customAvatarURL,
+                    monogramFontSize: 8,
+                    borderWidth: 0
+                )
+                Text(verbatim: agent.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(theme.primaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(theme.accentColor)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? theme.accentColor.opacity(0.10) : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 
     /// Agents offered as project defaults: the built-in Osaurus setup agent
