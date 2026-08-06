@@ -84,7 +84,7 @@ struct ProjectDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 36) {
                 header
                 instructionsSection
                 defaultAgentSection
@@ -172,7 +172,7 @@ struct ProjectDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Instructions", bundle: .module)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(theme.primaryText)
                 Spacer()
                 if hasEdits {
@@ -233,7 +233,7 @@ struct ProjectDetailView: View {
     private var defaultAgentSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Default Agent", bundle: .module)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(theme.primaryText)
 
             Text("New chats started from this project use this agent.", bundle: .module)
@@ -364,7 +364,7 @@ struct ProjectDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Knowledge", bundle: .module)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(theme.primaryText)
                 Spacer()
                 Button {
@@ -481,7 +481,7 @@ struct ProjectDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Conversations", bundle: .module)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(theme.primaryText)
                 Spacer()
                 Button(action: onNewChat) {
