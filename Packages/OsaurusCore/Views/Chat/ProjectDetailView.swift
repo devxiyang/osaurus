@@ -381,7 +381,7 @@ struct ProjectDetailView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .semibold))
-                        Text("Add Collection", bundle: .module)
+                        Text("New Collection", bundle: .module)
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .foregroundColor(theme.accentColor)

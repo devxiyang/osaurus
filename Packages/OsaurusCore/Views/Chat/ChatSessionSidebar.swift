@@ -756,8 +756,10 @@ struct ChatSessionSidebar: View {
                 Button {
                     requestNewProject()
                 } label: {
+                    // folder.badge.plus is a wider glyph than the square-based
+                    // header icons; one point down keeps it optically equal.
                     Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.plain)
