@@ -62,6 +62,13 @@ final class ChatWindowState: ObservableObject {
     /// so chat-specific chrome (agent pill, window pin) hides with it.
     @Published var isProjectPageVisible: Bool = false
 
+    /// True when the current chat was entered FROM its project's detail page
+    /// (as opposed to the sidebar's Chats tab). The toolbar's back-to-project
+    /// button uses this only to pick its icon: a back chevron when returning
+    /// retraces the user's path, a folder when the project page would be new
+    /// navigation. Set alongside `loadSession`/`startNewChat` by `ChatView`.
+    @Published var enteredChatFromProjectPage: Bool = false
+
     /// Drives the "a local model is already running in another window" alert
     /// raised when the user tries to start a second local generation. Only one
     /// local generation can run at a time across windows; the alert is

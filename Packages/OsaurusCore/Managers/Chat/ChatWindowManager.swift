@@ -1189,7 +1189,10 @@ private struct ChatToolbarBackContent: View {
                 )
             }) {
                 HStack(spacing: 5) {
-                    Image(systemName: "chevron.left")
+                    // A chevron retraces the user's path when they came from
+                    // the project page; a folder signals new navigation when
+                    // the chat was opened straight from the Chats tab.
+                    Image(systemName: windowState.enteredChatFromProjectPage ? "chevron.left" : "folder")
                         .font(.system(size: 12, weight: .medium))
                     Text(project.name)
                         .font(.system(size: 12, weight: .medium))
@@ -1210,7 +1213,11 @@ private struct ChatToolbarBackContent: View {
                     isHovered = hovering
                 }
             }
-            .help(Text(LocalizedStringKey("Back to project"), bundle: .module))
+            .help(
+                Text(
+                    LocalizedStringKey(
+                        windowState.enteredChatFromProjectPage ? "Back to project" : "Open project"),
+                    bundle: .module))
             // Anchor to the CONTENT area's top-left, not the window's:
             // with the sidebar open, the un-padded item would sit over the
             // sidebar beside its toggle. The inset ≈ sidebar width (240)

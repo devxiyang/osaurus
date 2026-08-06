@@ -7699,11 +7699,13 @@ struct ChatView: View {
                             currentSessionId: session.sessionId,
                             onSelect: { data in
                                 openProjectId = nil
+                                windowState.enteredChatFromProjectPage = false
                                 windowState.loadSession(data)
                                 isPinnedToBottom = true
                             },
                             onNewChat: { projectId in
                                 openProjectId = nil
+                                windowState.enteredChatFromProjectPage = projectId != nil
                                 windowState.startNewChat()
                                 // A chat started from a project's page joins
                                 // that project; persisted with the first
@@ -8003,11 +8005,13 @@ struct ChatView: View {
                             project: project,
                             onOpenSession: { data in
                                 openProjectId = nil
+                                windowState.enteredChatFromProjectPage = true
                                 windowState.loadSession(data)
                                 isPinnedToBottom = true
                             },
                             onNewChat: {
                                 openProjectId = nil
+                                windowState.enteredChatFromProjectPage = true
                                 windowState.startNewChat()
                                 session.projectId = project.id
                             },
