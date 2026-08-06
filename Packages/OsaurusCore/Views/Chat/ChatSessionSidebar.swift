@@ -1371,7 +1371,9 @@ private struct SessionRow: View {
                     Menu {
                         moveToProjectItems(onMove: onSetProject)
                     } label: {
-                        Text("Move to Project", bundle: .module)
+                        Text(
+                            session.projectId == nil ? "Move to Project" : "Change Project",
+                            bundle: .module)
                     }
                 }
                 Divider()
@@ -1477,7 +1479,11 @@ private struct SessionRow: View {
                 onTogglePin()
             }
             if !projects.isEmpty, onSetProject != nil {
-                ActionsPopoverButton(icon: "folder", label: "Move to Project", isDestructive: false) {
+                ActionsPopoverButton(
+                    icon: "folder",
+                    label: session.projectId == nil ? "Move to Project" : "Change Project",
+                    isDestructive: false
+                ) {
                     showProjectPicker = true
                 }
             }
