@@ -336,8 +336,64 @@ public struct SystemPromptComposer: Sendable {
         guard !memoryOff else { return nil }
         trace?.mark("memory_start")
         let section = await assembleMemorySection(agentId: agentId.uuidString, query: query)
+        let merged = await appendProjectMemory(
+            to: section, projectId: snapshot.projectId, query: query)
         trace?.mark("memory_done")
-        return section
+        return merged
+    }
+
+    /// Second recall lane for project chats: assemble the `project:<id>`
+    /// namespace and append it under its own header. Non-project chats
+    /// (`projectId == nil`) return `agentSection` untouched — the agent
+    /// memory pipeline is byte-identical with or without this feature.
+    ///
+    /// Budgeting is agent-first: the project lane gets whatever the agent
+    /// lane left of the per-message budget, floored at a quarter of it so
+    /// a memory-heavy agent can't starve project recall entirely. Combined
+    /// output therefore never exceeds ~1.25x the configured budget.
+    private static func appendProjectMemory(
+        to agentSection: String?,
+        projectId: UUID?,
+        query: String
+    ) async -> String? {
+        guard let projectId else { return agentSection }
+        let config = MemoryConfigurationStore.load()
+        guard config.enabled else { return agentSection }
+
+        let budget = config.memoryBudgetTokens
+        let agentTokens = (agentSection?.count ?? 0) / MemoryConfiguration.charsPerToken
+        let projectBudget = max(budget / 4, budget - agentTokens)
+
+        let raw = await MemoryContextAssembler.assembleContext(
+            agentId: MemoryNamespace.project(projectId).key,
+            config: config,
+            query: query.trimmingCharacters(in: .whitespacesAndNewlines),
+            budgetTokensOverride: projectBudget,
+            includeGlobalBlocks: false
+        )
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return agentSection }
+
+        // Exact-line dedupe against the agent lane: the same agent's
+        // distillates are dual-written to both namespaces, so their lines
+        // are literal copies. Near-duplicates from OTHER agents are kept —
+        // suppressing a fact just because a different agent phrased it
+        // similarly risks dropping real information.
+        let agentLines = Set(
+            (agentSection ?? "").split(separator: "\n").map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }.filter { !$0.isEmpty })
+        let freshLines = trimmed.split(separator: "\n").filter { line in
+            let t = line.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty || !agentLines.contains(t)
+        }
+        let fresh = freshLines.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fresh.isEmpty else { return agentSection }
+
+        let projectBlock = "## Shared project memory\n\n\(fresh)"
+        guard let agentSection, !agentSection.isEmpty else { return projectBlock }
+        return agentSection + "\n\n" + projectBlock
     }
 
     // MARK: - SOUL Assembly

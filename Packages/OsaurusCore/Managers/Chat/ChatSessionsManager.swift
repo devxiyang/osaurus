@@ -241,6 +241,16 @@ final class ChatSessionsManager: ObservableObject {
         }
         sessions = updated
         ProjectManager.shared.delete(id: id)
+        // Drop the project's shared memory namespace: DB rows, vector
+        // index (memory + disk), and any cached assembler block. Off the
+        // main actor and best-effort — a failure leaves orphan rows that
+        // the namespace simply never reads again.
+        let namespaceKey = MemoryNamespace.project(id).key
+        Task.detached(priority: .utility) {
+            try? MemoryDatabase.shared.deleteNamespaceData(agentId: namespaceKey)
+            await MemorySearchService.shared.purgeNamespaceStorage(agentId: namespaceKey)
+            await MemoryContextAssembler.shared.invalidateCache(agentId: namespaceKey)
+        }
         // Live ChatSessions in other windows may still point at the dead
         // project; tell them to drop it (see setProject).
         NotificationCenter.default.post(

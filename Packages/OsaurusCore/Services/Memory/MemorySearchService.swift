@@ -121,6 +121,18 @@ public actor MemorySearchService {
         transcriptKeyMap.removeAll(keepingCapacity: false)
     }
 
+    /// Evict a namespace's in-memory vector state AND remove its on-disk
+    /// index directory. For namespaces that are wholly owned by a deletable
+    /// container (a project's `project-<uuid>`), unlike `evictAgent` there
+    /// is no other owner of the disk index, so it goes too.
+    public func purgeNamespaceStorage(agentId: String) async {
+        await evictAgent(agentId: agentId)
+        let dir = Self.storageDir(for: agentId)
+        // Guard against ever unlinking the shared bucket's directory.
+        guard Self.bucketKey(for: agentId) != Self.sharedAgentBucket else { return }
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     private static let sharedAgentBucket = ""
 
     private static func bucketKey(for agentId: String?) -> String {

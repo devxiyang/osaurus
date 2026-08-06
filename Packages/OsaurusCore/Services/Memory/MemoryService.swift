@@ -842,6 +842,20 @@ public actor MemoryService {
                 episodeId: episodeId
             )
 
+            // Shared project memory: if the conversation belongs to a
+            // project, mirror the distilled episode (and pinned candidates)
+            // into the project's namespace so other chats in the project can
+            // recall it. Strictly additive and best-effort — the agent
+            // write above already succeeded and its outcome is never
+            // affected by anything in this block. One LLM distill, two
+            // cheap row inserts; no pending signals are ever written under
+            // the project namespace.
+            await mirrorDistillateToProject(
+                episode: ep,
+                pinnedCandidates: parsed.pinnedCandidates,
+                conversationId: conversationId
+            )
+
             // Apply identity delta: the distillation may declare new
             // identity-grade facts. We append them to overrides only when the
             // model marked them as identity-relevant.
@@ -984,6 +998,47 @@ public actor MemoryService {
     /// Persist pinned candidates that pass the dedup check. Uses Jaccard
     /// against existing pinned facts (cheap, deterministic) — the
     /// consolidator handles deeper merging later.
+    /// Mirror a just-distilled episode into its chat's project namespace
+    /// (`project:<uuid>`), when the chat belongs to one. Membership is read
+    /// at distill time, so a chat moved out of a project before its distill
+    /// runs correctly writes nothing. Failures are logged and swallowed —
+    /// this must never affect the agent-namespace outcome.
+    private func mirrorDistillateToProject(
+        episode: Episode,
+        pinnedCandidates: [DistillResult.PinnedCandidate],
+        conversationId: String
+    ) async {
+        guard let sessionId = UUID(uuidString: conversationId) else { return }
+        let projectId = await MainActor.run {
+            ChatSessionsManager.shared.session(for: sessionId)?.projectId
+        }
+        guard let projectId else { return }
+        let namespaceKey = MemoryNamespace.project(projectId).key
+
+        var mirrored = episode
+        mirrored.id = 0
+        mirrored.agentId = namespaceKey
+        do {
+            let mirroredId = try db.insertEpisode(mirrored)
+            mirrored.id = mirroredId
+            await MemorySearchService.shared.indexEpisode(mirrored)
+            // Same promotion/dedupe pass as the agent namespace, scoped to
+            // the project's own existing facts.
+            let pinned = await persistPinnedCandidates(
+                pinnedCandidates,
+                agentId: namespaceKey,
+                episodeId: mirroredId
+            )
+            await MemoryContextAssembler.shared.invalidateCache(agentId: namespaceKey)
+            MemoryLogger.service.info(
+                "distill: mirrored episode #\(mirroredId) (+\(pinned) pinned) to \(namespaceKey, privacy: .public)"
+            )
+        } catch {
+            MemoryLogger.service.error(
+                "distill: project mirror failed for \(conversationId): \(error)")
+        }
+    }
+
     private func persistPinnedCandidates(
         _ candidates: [DistillResult.PinnedCandidate],
         agentId: String,

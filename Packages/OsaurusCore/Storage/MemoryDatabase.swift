@@ -1916,6 +1916,22 @@ public final class MemoryDatabase: @unchecked Sendable {
         return count
     }
 
+    /// Remove every episode and pinned fact stored under a memory
+    /// namespace. Used when a project is deleted to drop its shared
+    /// `project-<uuid>` namespace. Transcripts and pending signals are
+    /// never written under project namespaces, so those tables are not
+    /// touched.
+    public func deleteNamespaceData(agentId: String) throws {
+        try inTransaction { _ in
+            _ = try executeUpdate("DELETE FROM episodes WHERE agent_id = ?1") { stmt in
+                Self.bindText(stmt, index: 1, value: agentId)
+            }
+            _ = try executeUpdate("DELETE FROM pinned_facts WHERE agent_id = ?1") { stmt in
+                Self.bindText(stmt, index: 1, value: agentId)
+            }
+        }
+    }
+
     public func deleteEpisode(id: Int) throws {
         _ = try executeUpdate("DELETE FROM episodes WHERE id = ?1") { stmt in
             sqlite3_bind_int(stmt, 1, Int32(id))

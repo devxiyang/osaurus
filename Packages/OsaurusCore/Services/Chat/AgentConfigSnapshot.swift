@@ -92,6 +92,11 @@ public struct AgentConfigSnapshot: Sendable, Equatable {
     /// the default fallback.
     public let systemPrompt: String
 
+    /// Project this compose runs inside, when the chat belongs to one.
+    /// Drives the shared project-memory recall lane; nil (every non-project
+    /// chat) leaves the memory pipeline exactly as before.
+    public let projectId: UUID?
+
     /// Whether the Agent DB feature (spec §5.5) is enabled for this agent.
     /// Drives both tool gating (the `db_*` tools are filtered out when
     /// false) and prompt injection (the onboarding block + schema
@@ -217,9 +222,11 @@ public struct AgentConfigSnapshot: Sendable, Equatable {
         knowledgeEnabled: Bool = false,
         knowledgeCuratorEnabled: Bool = false,
         knowledgeCollections: [KnowledgeGrantDescriptor] = [],
-        hasChannelPublishDestinations: Bool = false
+        hasChannelPublishDestinations: Bool = false,
+        projectId: UUID? = nil
     ) {
         self.agentId = agentId
+        self.projectId = projectId
         self.toolsDisabled = toolsDisabled
         self.globalToolsDisabled = globalToolsDisabled
         self.memoryDisabled = memoryDisabled
@@ -383,7 +390,8 @@ public struct AgentConfigSnapshot: Sendable, Equatable {
                     agentId: agentId,
                     source: ChatExecutionContext.currentSessionSource
                 )
-                .isEmpty
+                .isEmpty,
+            projectId: projectId
         )
     }
 }
