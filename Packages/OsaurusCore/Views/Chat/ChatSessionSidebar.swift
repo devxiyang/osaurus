@@ -236,7 +236,8 @@ struct ChatSessionSidebar: View {
                     text: $searchQuery,
                     placeholder: "Search conversations...",
                     isFocused: $isSearchFocused,
-                    isSearching: isContentSearchInFlight
+                    isSearching: isContentSearchInFlight,
+                    showsRestingBorder: true
                 )
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
