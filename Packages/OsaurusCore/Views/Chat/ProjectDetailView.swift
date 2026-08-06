@@ -269,7 +269,8 @@ struct ProjectDetailView: View {
                         .foregroundColor(theme.secondaryText)
                 }
                 .padding(.horizontal, 10)
-                .frame(width: 240, height: 32)
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(theme.secondaryBackground.opacity(theme.isDark ? 0.35 : 0.5))
@@ -289,7 +290,7 @@ struct ProjectDetailView: View {
                     }
                 }
                 .padding(6)
-                .frame(minWidth: 228)
+                .frame(minWidth: 280)
             }
         }
     }
@@ -634,35 +635,37 @@ private struct ProjectConversationRow: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 10) {
-                Image(systemName: "bubble.left")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: 16)
-
-                Text(verbatim: session.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(theme.primaryText)
-                    .lineLimit(1)
-
-                Spacer()
-
                 if let agent {
-                    HStack(spacing: 5) {
-                        AgentAvatarView(
-                            mascotId: agent.avatar,
-                            name: agent.name,
-                            tint: theme.accentColor,
-                            diameter: 16,
-                            customImageURL: agent.customAvatarURL,
-                            monogramFontSize: 8,
-                            borderWidth: 0
-                        )
-                        Text(verbatim: agent.name)
+                    AgentAvatarView(
+                        mascotId: agent.avatar,
+                        name: agent.name,
+                        tint: theme.accentColor,
+                        diameter: 24,
+                        customImageURL: agent.customAvatarURL,
+                        monogramFontSize: 10,
+                        borderWidth: 0
+                    )
+                } else {
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(theme.secondaryText)
+                        .frame(width: 24, height: 24)
+                }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: session.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(theme.primaryText)
+                        .lineLimit(1)
+                    if let agent {
+                        Text(verbatim: agent.displayName)
                             .font(.system(size: 10))
                             .foregroundColor(theme.secondaryText.opacity(0.85))
                             .lineLimit(1)
                     }
                 }
+
+                Spacer()
 
                 Button(action: onRemove) {
                     Image(systemName: "folder.badge.minus")
