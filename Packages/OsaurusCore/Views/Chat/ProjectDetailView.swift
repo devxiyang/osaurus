@@ -146,22 +146,6 @@ struct ProjectDetailView: View {
 
             Spacer()
 
-            // The toolbar's chat chrome (agent pill, gear) hides on this
-            // page, so settings needs its own entry point here.
-            Button {
-                AppDelegate.shared?.showManagementWindow(initialTab: nil)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(theme.secondaryBackground.opacity(0.5)))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-            .localizedHelp("Settings")
-
             Menu {
                 Button(action: requestRename) { Text("Rename", bundle: .module) }
                 Divider()

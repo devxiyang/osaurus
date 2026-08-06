@@ -915,6 +915,7 @@ private struct ChatFullScreenHeaderView: View {
                 Spacer()
                 ChatToolbarActionView(windowState: windowState)
                 ChatToolbarPinView(windowState: windowState)
+                ChatToolbarSettingsView(windowState: windowState)
             }
             ChatToolbarAgentView(windowState: windowState)
         }
@@ -946,6 +947,7 @@ private final class ChatToolbarDelegate: NSObject, NSToolbarDelegate {
     fileprivate static let agentItem = NSToolbarItem.Identifier("ChatToolbar.agent")
     fileprivate static let actionItem = NSToolbarItem.Identifier("ChatToolbar.action")
     fileprivate static let pinItem = NSToolbarItem.Identifier("ChatToolbar.pin")
+    fileprivate static let settingsItem = NSToolbarItem.Identifier("ChatToolbar.settings")
 
     /// Layout: sidebar on the leading edge, agent pill centered (via the
     /// toolbar's `centeredItemIdentifier`), action + pin on the trailing edge.
@@ -955,6 +957,7 @@ private final class ChatToolbarDelegate: NSObject, NSToolbarDelegate {
     /// renders them as no-ops rather than crashing.
     private static let itemIdentifiers: [NSToolbarItem.Identifier] = [
         sidebarItem, backItem, .flexibleSpace, agentItem, .flexibleSpace, actionItem, pinItem,
+        settingsItem,
     ]
 
     private weak var windowState: ChatWindowState?
@@ -1013,6 +1016,13 @@ private final class ChatToolbarDelegate: NSObject, NSToolbarDelegate {
                 identifier: itemIdentifier,
                 rootView:
                     ChatToolbarPinView(windowState: windowState)
+            )
+
+        case Self.settingsItem:
+            return makeHostingItem(
+                identifier: itemIdentifier,
+                rootView:
+                    ChatToolbarSettingsView(windowState: windowState)
             )
 
         default:
@@ -1333,6 +1343,24 @@ private struct ChatToolbarChangesButton: View {
             }
         }
         .help(Text(LocalizedStringKey("File changes"), bundle: .module))
+    }
+}
+
+/// Settings gear, shown ONLY on the project detail page — the chat surface
+/// reaches settings through the agent pill's gear, which hides with the
+/// rest of the chat chrome while a project is open.
+private struct ChatToolbarSettingsView: View {
+    @ObservedObject var windowState: ChatWindowState
+
+    var body: some View {
+        if windowState.isProjectPageVisible {
+            HeaderActionButton(
+                icon: "gearshape",
+                help: "Settings",
+                action: { AppDelegate.shared?.showManagementWindow(initialTab: nil) }
+            )
+            .environment(\.theme, windowState.theme)
+        }
     }
 }
 
