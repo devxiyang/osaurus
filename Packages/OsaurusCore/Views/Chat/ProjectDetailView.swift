@@ -296,9 +296,9 @@ struct ProjectDetailView: View {
                     .foregroundColor(theme.primaryText)
                 Spacer()
                 Button(action: onNewChat) {
-                    HStack(spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: "square.and.pencil")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                         Text("New Chat", bundle: .module)
                             .font(.system(size: 11, weight: .semibold))
                     }
