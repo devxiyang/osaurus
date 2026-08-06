@@ -526,6 +526,7 @@ struct KnowledgeView: View {
 private struct KnowledgeCollectionCard: View {
     @Environment(\.theme) private var theme
     @ObservedObject private var agentManager = AgentManager.shared
+    @ObservedObject private var projectManager = ProjectManager.shared
 
     let collection: KnowledgeCollection
     let animationDelay: Double
@@ -633,6 +634,35 @@ private struct KnowledgeCollectionCard: View {
         )
     }
 
+    /// Projects granting this collection to their chats. Purely informational
+    /// — grants are edited on each project's page; the card just surfaces the
+    /// blast radius of disabling or deleting the collection.
+    private var grantingProjects: [Project] {
+        projectManager.projects.filter { $0.knowledgeCollectionIds.contains(collection.id) }
+    }
+
+    @ViewBuilder
+    private var grantingProjectsRow: some View {
+        let projects = grantingProjects
+        if !projects.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .font(.system(size: 10))
+                    .foregroundColor(theme.secondaryText)
+                Text(
+                    projects.count == 1
+                        ? String(format: L("Used by project %@"), projects[0].name)
+                        : String(format: L("Used by %lld projects"), projects.count)
+                )
+                .font(.system(size: 11))
+                .foregroundColor(theme.secondaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            }
+            .help(L("Projects using this collection: \(projects.map(\.name).joined(separator: ", "))"))
+        }
+    }
+
     private var okfHelp: String {
         switch okfStatus {
         case .conformant:
@@ -706,6 +736,7 @@ private struct KnowledgeCollectionCard: View {
             // Folder path and git remote intentionally omitted — they
             // crowd the card and live in the detail sheet (tap the card).
             grantedAgentsRow
+            grantingProjectsRow
             Button(action: {
                 Task {
                     await refreshOKFStatus()
