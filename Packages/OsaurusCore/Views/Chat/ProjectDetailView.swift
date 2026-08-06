@@ -232,9 +232,11 @@ struct ProjectDetailView: View {
                     .foregroundColor(theme.primaryText)
                 Spacer()
                 Button {
-                    // One-shot flag consumed by KnowledgeView so the create
-                    // sheet pops as soon as the tab shows, saving a click.
-                    ManagementStateManager.shared.pendingKnowledgeCreate = true
+                    // One-shot request consumed by KnowledgeView so the create
+                    // sheet pops as soon as the tab shows, saving a click,
+                    // with the name prefilled after this project.
+                    ManagementStateManager.shared.pendingKnowledgeCreateName =
+                        "\(project.name) Collection"
                     AppDelegate.shared?.showManagementWindow(initialTab: .knowledge)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {

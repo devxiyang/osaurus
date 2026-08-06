@@ -19,6 +19,9 @@ struct KnowledgeView: View {
     private var theme: ThemeProtocol { themeManager.currentTheme }
 
     @State private var isCreating = false
+    /// Name prefilled into the create sheet by a deep link (e.g. the project
+    /// page's Add Collection shortcut). Cleared when the sheet closes.
+    @State private var creationPrefillName = ""
     @State private var editingCollection: KnowledgeCollection?
     @State private var hasAppeared = false
     @State private var successMessage: String?
@@ -141,9 +144,10 @@ struct KnowledgeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.primaryBackground)
         .environment(\.theme, themeManager.currentTheme)
-        .sheet(isPresented: $isCreating) {
+        .sheet(isPresented: $isCreating, onDismiss: { creationPrefillName = "" }) {
             KnowledgeCollectionEditorSheet(
                 collection: nil,
+                initialName: creationPrefillName,
                 onSave: { name, summary, folderPath, remoteURL in
                     isCreating = false
                     if let remoteURL, !remoteURL.isEmpty {
@@ -290,8 +294,8 @@ struct KnowledgeView: View {
         // create sheet directly instead of landing the user on the tab to
         // click the same button again. One-shot; also handled in `.onAppear`
         // for the case where the request is set before this view mounts.
-        .onReceive(ManagementStateManager.shared.$pendingKnowledgeCreate) { pending in
-            if pending { applyPendingCreateRequest() }
+        .onReceive(ManagementStateManager.shared.$pendingKnowledgeCreateName) { pending in
+            if pending != nil { applyPendingCreateRequest() }
         }
         // Self-healing refresh. The curation list is otherwise driven by
         // notifications + appear/window-key hooks, all of which are unreliable
@@ -310,8 +314,9 @@ struct KnowledgeView: View {
     }
 
     private func applyPendingCreateRequest() {
-        guard ManagementStateManager.shared.pendingKnowledgeCreate else { return }
-        ManagementStateManager.shared.pendingKnowledgeCreate = false
+        guard let prefill = ManagementStateManager.shared.pendingKnowledgeCreateName else { return }
+        ManagementStateManager.shared.pendingKnowledgeCreateName = nil
+        creationPrefillName = prefill
         isCreating = true
     }
 
@@ -817,13 +822,14 @@ private struct KnowledgeCollectionEditorSheet: View {
 
     init(
         collection: KnowledgeCollection?,
+        initialName: String = "",
         onSave: @escaping (_ name: String, _ summary: String, _ folderPath: String, _ remoteURL: String?) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.collection = collection
         self.onSave = onSave
         self.onCancel = onCancel
-        _name = State(initialValue: collection?.name ?? "")
+        _name = State(initialValue: collection?.name ?? initialName)
         _summary = State(initialValue: collection?.summary ?? "")
         _folderPath = State(initialValue: collection?.folderPath ?? "")
     }
@@ -854,7 +860,7 @@ private struct KnowledgeCollectionEditorSheet: View {
             )
 
             StyledSettingsTextField(
-                label: "Summary",
+                label: "Summary (optional)",
                 text: $summary,
                 placeholder: "What this corpus contains, shown to agents",
                 help: ""
