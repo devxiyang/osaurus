@@ -1406,7 +1406,7 @@ private struct SessionRow: View {
         }
         if session.projectId != nil {
             Divider()
-            Button {
+            Button(role: .destructive) {
                 onMove(nil)
             } label: {
                 Text("Remove from Project", bundle: .module)
@@ -1448,7 +1448,7 @@ private struct SessionRow: View {
             if session.projectId != nil {
                 Divider().padding(.vertical, 2)
                 ActionsPopoverButton(
-                    icon: "folder.badge.minus", label: "Remove from Project", isDestructive: false
+                    icon: "folder.badge.minus", label: "Remove from Project", isDestructive: true
                 ) {
                     dismissProjectPicker()
                     onSetProject?(nil)
