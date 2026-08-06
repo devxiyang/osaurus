@@ -911,7 +911,7 @@ private struct ChatFullScreenHeaderView: View {
         ZStack {
             HStack(spacing: 8) {
                 ChatToolbarSidebarView(windowState: windowState)
-                ChatToolbarBackView(windowState: windowState, sidebarOpenInset: 192)
+                ChatToolbarBackView(windowState: windowState, sidebarOpenInset: 164)
                 Spacer()
                 ChatToolbarActionView(windowState: windowState)
                 ChatToolbarPinView(windowState: windowState)
@@ -1159,7 +1159,7 @@ private struct ChatToolbarBackView: View {
     /// at the CONTENT area's top-left instead of over the sidebar. Differs
     /// between the NSToolbar (traffic lights + toggle item precede it) and
     /// the full-screen header (no traffic lights).
-    var sidebarOpenInset: CGFloat = 132
+    var sidebarOpenInset: CGFloat = 104
 
     var body: some View {
         ChatToolbarBackContent(
@@ -1171,7 +1171,7 @@ private struct ChatToolbarBackView: View {
 private struct ChatToolbarBackContent: View {
     @ObservedObject var windowState: ChatWindowState
     @ObservedObject var session: ChatSession
-    var sidebarOpenInset: CGFloat = 132
+    var sidebarOpenInset: CGFloat = 104
     @ObservedObject private var projectManager = ProjectManager.shared
 
     var body: some View {
