@@ -284,6 +284,14 @@ struct KnowledgeView: View {
                 hasAppeared = true
             }
             reloadCuration()
+            applyPendingCreateRequest()
+        }
+        // Deep link from the project page's Add Collection shortcut: pop the
+        // create sheet directly instead of landing the user on the tab to
+        // click the same button again. One-shot; also handled in `.onAppear`
+        // for the case where the request is set before this view mounts.
+        .onReceive(ManagementStateManager.shared.$pendingKnowledgeCreate) { pending in
+            if pending { applyPendingCreateRequest() }
         }
         // Self-healing refresh. The curation list is otherwise driven by
         // notifications + appear/window-key hooks, all of which are unreliable
@@ -299,6 +307,12 @@ struct KnowledgeView: View {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
+    }
+
+    private func applyPendingCreateRequest() {
+        guard ManagementStateManager.shared.pendingKnowledgeCreate else { return }
+        ManagementStateManager.shared.pendingKnowledgeCreate = false
+        isCreating = true
     }
 
     // MARK: - Curation

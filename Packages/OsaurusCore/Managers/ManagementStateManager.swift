@@ -60,6 +60,12 @@ public final class ManagementStateManager: ObservableObject {
     /// `PluginsView` observes this and resets it to nil after applying.
     @Published public var pendingPluginDetailId: String?
 
+    /// One-shot request to pop the "Add Collection" sheet on the Knowledge
+    /// tab — e.g. from the project page's Add Collection shortcut, so the
+    /// user isn't dropped on the tab just to click the same button again.
+    /// `KnowledgeView` observes this and resets it to false after applying.
+    @Published public var pendingKnowledgeCreate: Bool = false
+
     /// One-shot request to open the detail page for a specific paired remote
     /// agent (`RemoteAgent.id`) — e.g. from the chat empty-state gear button.
     /// `AgentsView` observes this and resets it to nil after applying.
