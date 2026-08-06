@@ -233,10 +233,13 @@ struct ProjectDetailView: View {
                 Spacer()
                 Button {
                     // One-shot request consumed by KnowledgeView so the create
-                    // sheet pops as soon as the tab shows, saving a click,
-                    // with the name prefilled after this project.
-                    ManagementStateManager.shared.pendingKnowledgeCreateName =
-                        "\(project.name) Collection"
+                    // sheet pops as soon as the tab shows, saving a click. The
+                    // created collection is named after this project and
+                    // granted to it automatically.
+                    ManagementStateManager.shared.pendingKnowledgeCreate = .init(
+                        prefillName: "\(project.name) Collection",
+                        grantProjectId: project.id
+                    )
                     AppDelegate.shared?.showManagementWindow(initialTab: .knowledge)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {

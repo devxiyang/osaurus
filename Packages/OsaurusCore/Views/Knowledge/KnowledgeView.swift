@@ -22,6 +22,10 @@ struct KnowledgeView: View {
     /// Name prefilled into the create sheet by a deep link (e.g. the project
     /// page's Add Collection shortcut). Cleared when the sheet closes.
     @State private var creationPrefillName = ""
+    /// Project the created collection should be granted to, from the same
+    /// deep link. Captured into the save closure, so clearing on dismiss
+    /// can't race the async create.
+    @State private var creationGrantProjectId: UUID?
     @State private var editingCollection: KnowledgeCollection?
     @State private var hasAppeared = false
     @State private var successMessage: String?
@@ -144,11 +148,17 @@ struct KnowledgeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.primaryBackground)
         .environment(\.theme, themeManager.currentTheme)
-        .sheet(isPresented: $isCreating, onDismiss: { creationPrefillName = "" }) {
+        .sheet(
+            isPresented: $isCreating,
+            onDismiss: {
+                creationPrefillName = ""
+                creationGrantProjectId = nil
+            }
+        ) {
             KnowledgeCollectionEditorSheet(
                 collection: nil,
                 initialName: creationPrefillName,
-                onSave: { name, summary, folderPath, remoteURL in
+                onSave: { [grantProjectId = creationGrantProjectId] name, summary, folderPath, remoteURL in
                     isCreating = false
                     if let remoteURL, !remoteURL.isEmpty {
                         showSuccess("Cloning \"\(name)\"…")
@@ -159,6 +169,7 @@ struct KnowledgeView: View {
                                     summary: summary,
                                     remoteURL: remoteURL
                                 )
+                                grantToRequestingProject(created, projectId: grantProjectId)
                                 showSuccess("Cloned \"\(created.name)\", indexing in the background")
                                 grantingCollection = created
                             } catch {
@@ -172,6 +183,7 @@ struct KnowledgeView: View {
                                 summary: summary,
                                 folderPath: folderPath
                             )
+                            grantToRequestingProject(created, projectId: grantProjectId)
                             showSuccess("Added \"\(created.name)\", indexing in the background")
                             grantingCollection = created
                         }
@@ -294,7 +306,7 @@ struct KnowledgeView: View {
         // create sheet directly instead of landing the user on the tab to
         // click the same button again. One-shot; also handled in `.onAppear`
         // for the case where the request is set before this view mounts.
-        .onReceive(ManagementStateManager.shared.$pendingKnowledgeCreateName) { pending in
+        .onReceive(ManagementStateManager.shared.$pendingKnowledgeCreate) { pending in
             if pending != nil { applyPendingCreateRequest() }
         }
         // Self-healing refresh. The curation list is otherwise driven by
@@ -314,10 +326,23 @@ struct KnowledgeView: View {
     }
 
     private func applyPendingCreateRequest() {
-        guard let prefill = ManagementStateManager.shared.pendingKnowledgeCreateName else { return }
-        ManagementStateManager.shared.pendingKnowledgeCreateName = nil
-        creationPrefillName = prefill
+        guard let request = ManagementStateManager.shared.pendingKnowledgeCreate else { return }
+        ManagementStateManager.shared.pendingKnowledgeCreate = nil
+        creationPrefillName = request.prefillName
+        creationGrantProjectId = request.grantProjectId
         isCreating = true
+    }
+
+    /// Grant a freshly created collection to the deep link's project, so the
+    /// user returns to the project page with the new collection already
+    /// checked instead of having to toggle it on themselves.
+    private func grantToRequestingProject(_ collection: KnowledgeCollection, projectId: UUID?) {
+        guard let projectId, var project = ProjectManager.shared.project(for: projectId) else {
+            return
+        }
+        guard !project.knowledgeCollectionIds.contains(collection.id) else { return }
+        project.knowledgeCollectionIds.append(collection.id)
+        ProjectManager.shared.update(project)
     }
 
     // MARK: - Curation
