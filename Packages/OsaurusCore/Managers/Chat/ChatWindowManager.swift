@@ -1157,6 +1157,13 @@ extension Notification.Name {
     /// Posted by the `/agent` slash command to pop open the toolbar's agent
     /// picker for the window identified in `userInfo["windowId"]`.
     static let chatToolbarOpenAgentPicker = Notification.Name("chatToolbarOpenAgentPicker")
+    /// Posted by `ChatSessionsManager` when a session's project membership
+    /// changes (or a whole project is deleted), so open chat windows update
+    /// their live `ChatSession.projectId` — the value each turn's compose
+    /// reads for project instructions and knowledge grants. userInfo carries
+    /// either `sessionId` + `projectId` (single move) or `clearedProjectId`
+    /// (project deleted).
+    static let chatSessionProjectDidChange = Notification.Name("chatSessionProjectDidChange")
 }
 
 /// Back button beside the sidebar toggle: shown while the current chat

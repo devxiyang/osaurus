@@ -8067,6 +8067,19 @@ struct ChatView: View {
             else { return }
             openProjectId = session.projectId
         }
+        // Keep the live session's membership in sync with sidebar/other-window
+        // moves: compose reads `session.projectId` every turn, so a stale copy
+        // keeps injecting the old project's instructions and knowledge.
+        .onReceive(NotificationCenter.default.publisher(for: .chatSessionProjectDidChange)) { notification in
+            if let clearedProjectId = notification.userInfo?["clearedProjectId"] as? UUID {
+                if session.projectId == clearedProjectId { session.projectId = nil }
+                return
+            }
+            guard let sessionId = notification.userInfo?["sessionId"] as? UUID,
+                sessionId == session.sessionId
+            else { return }
+            session.projectId = notification.userInfo?["projectId"] as? UUID
+        }
         .onReceive(NotificationCenter.default.publisher(for: .chatOverlayActivated)) { _ in
             // Lightweight state updates only - refreshAll() removed to prevent excessive re-renders
             focusTrigger &+= 1

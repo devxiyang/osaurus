@@ -221,6 +221,14 @@ final class ChatSessionsManager: ObservableObject {
         session.projectId = projectId
         ChatSessionStore.setProjectAsync(id: id, projectId: projectId)
         upsertInMemory(session)
+        // A live ChatSession for this id (an open chat window) holds its own
+        // projectId copy that the NEXT compose reads — without this it keeps
+        // injecting the old project's instructions/knowledge.
+        NotificationCenter.default.post(
+            name: .chatSessionProjectDidChange,
+            object: nil,
+            userInfo: ["sessionId": id, "projectId": projectId as Any]
+        )
     }
 
     /// Detach all sessions from a deleted project and drop the project
@@ -233,6 +241,13 @@ final class ChatSessionsManager: ObservableObject {
         }
         sessions = updated
         ProjectManager.shared.delete(id: id)
+        // Live ChatSessions in other windows may still point at the dead
+        // project; tell them to drop it (see setProject).
+        NotificationCenter.default.post(
+            name: .chatSessionProjectDidChange,
+            object: nil,
+            userInfo: ["clearedProjectId": id]
+        )
     }
 
     /// Get a session by ID
