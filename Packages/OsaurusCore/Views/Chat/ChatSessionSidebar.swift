@@ -817,7 +817,7 @@ struct ChatSessionSidebar: View {
                         moveSelected(to: projectId)
                     }
                 } label: {
-                    Image(systemName: "folder")
+                    Image(systemName: "folder.badge.plus")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(theme.secondaryText)
                         .frame(width: SidebarStyle.actionButtonSize, height: SidebarStyle.actionButtonSize)
@@ -828,6 +828,10 @@ struct ChatSessionSidebar: View {
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
+                // Menus tint their label with the control accent (blue) on
+                // macOS regardless of the label's own foregroundColor; force
+                // the same neutral tint the sibling buttons use.
+                .tint(theme.secondaryText)
                 .fixedSize()
                 .localizedHelp("Move to Project")
             }

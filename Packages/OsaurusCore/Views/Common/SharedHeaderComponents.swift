@@ -129,6 +129,7 @@ struct PinButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointingHandCursor()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
