@@ -194,6 +194,21 @@ struct ProjectDetailView: View {
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 90, maxHeight: 180)
                 .padding(8)
+                // TextEditor has no prompt; overlay one until text arrives.
+                // allowsHitTesting(false) keeps clicks landing in the editor.
+                .overlay(alignment: .topLeading) {
+                    if instructionsDraft.isEmpty {
+                        Text(
+                            "Add instructions the assistant should follow in every chat in this project…",
+                            bundle: .module
+                        )
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.tertiaryText)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 8)
+                        .allowsHitTesting(false)
+                    }
+                }
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(theme.secondaryBackground.opacity(theme.isDark ? 0.35 : 0.5))
