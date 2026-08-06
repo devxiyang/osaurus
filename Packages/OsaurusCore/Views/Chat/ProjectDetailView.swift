@@ -308,7 +308,7 @@ struct ProjectDetailView: View {
                     ManagementStateManager.shared.pendingKnowledgeDetailId = collection.id
                     AppDelegate.shared?.showManagementWindow(initialTab: .knowledge)
                 } label: {
-                    Image(systemName: "chevron.right.circle")
+                    Image(systemName: "chevron.right.circle.fill")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(theme.secondaryText)
                         .frame(width: 22, height: 22)
