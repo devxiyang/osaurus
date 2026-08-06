@@ -1199,6 +1199,13 @@ private struct ChatToolbarBackContent: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: 180, alignment: .leading)
+                    // Folder mode has no back chevron, so a trailing
+                    // chevron.right signals the pill navigates somewhere.
+                    if !windowState.enteredChatFromProjectPage {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .opacity(0.7)
+                    }
                 }
                 .foregroundColor(isHovered ? windowState.theme.accentColor : windowState.theme.secondaryText)
                 .padding(.horizontal, 10)
