@@ -65,6 +65,10 @@ struct MemoryView: View {
     @State var processingStats = ProcessingStats()
     @State private var dbSizeBytes: Int64 = 0
     @State private var agentMemoryCounts: [(agent: Agent, count: Int)] = []
+    /// Shared project-memory namespaces with content. `name` is nil for an
+    /// orphan (project deleted but its purge never completed) so the row
+    /// can offer cleanup instead of hiding rows the user can't account for.
+    @State private var projectMemoryCounts: [(namespaceKey: String, name: String?, count: Int)] = []
     @State private var defaultAgentPinned: [PinnedFact] = []
     @State private var defaultAgentEpisodes: [Episode] = []
     @State var pendingSignals = PendingSignalsSummary()
@@ -337,6 +341,9 @@ struct MemoryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 agentsSection
+                if !projectMemoryCounts.isEmpty {
+                    projectsSection
+                }
             }
             .padding(24)
         }
@@ -703,6 +710,64 @@ struct MemoryView: View {
         }
     }
 
+    // MARK: - Projects Section
+
+    /// Shared project memory: what each project's chats have contributed to
+    /// its `project-<uuid>` namespace. Read-only apart from Forget — grants
+    /// and membership are managed on the project pages; this surface exists
+    /// so project memory stays inspectable and deletable like agent memory.
+    private var projectsSection: some View {
+        MemorySectionCard(title: L("Projects"), icon: "folder") {
+            VStack(spacing: 0) {
+                ForEach(Array(projectMemoryCounts.enumerated()), id: \.element.namespaceKey) {
+                    index, entry in
+                    if index > 0 {
+                        Divider().opacity(0.5)
+                    }
+                    MemoryProjectRow(
+                        name: entry.name,
+                        count: entry.count,
+                        onPreviewContext: {
+                            Task {
+                                let cfg = MemoryConfigurationStore.load()
+                                let ctx = await MemoryContextAssembler.assembleContext(
+                                    agentId: entry.namespaceKey,
+                                    config: cfg,
+                                    includeGlobalBlocks: false
+                                )
+                                let trimmed = ctx.trimmingCharacters(in: .whitespacesAndNewlines)
+                                let text =
+                                    trimmed.isEmpty
+                                    ? L("(No memory context assembled — memory may be empty or disabled)")
+                                    : trimmed
+                                contextPreviewItem = ContextPreviewItem(text: text)
+                            }
+                        },
+                        onForget: {
+                            forgetProjectNamespace(entry.namespaceKey)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    /// Purge one project namespace (rows + vector index + cache) and
+    /// refresh. Same path project deletion uses, so no second way to be
+    /// wrong.
+    private func forgetProjectNamespace(_ namespaceKey: String) {
+        Task {
+            try? MemoryDatabase.shared.deleteNamespaceData(agentId: namespaceKey)
+            await MemorySearchService.shared.purgeNamespaceStorage(agentId: namespaceKey)
+            await MemoryContextAssembler.shared.invalidateCache(agentId: namespaceKey)
+            await MainActor.run {
+                projectMemoryCounts.removeAll { $0.namespaceKey == namespaceKey }
+                showToast(L("Project memory cleared"))
+                refreshData()
+            }
+        }
+    }
+
     // MARK: - Diagnostics Section
     //
     // The diagnostics card is large enough to live in its own file —
@@ -1021,6 +1086,18 @@ struct MemoryView: View {
                 return (agent: agent, count: pair.count)
             }
 
+            let projectEntries = (try? db.projectNamespaceCounts()) ?? []
+            let resolvedProjectCounts: [(namespaceKey: String, name: String?, count: Int)] =
+                await MainActor.run {
+                    projectEntries.map { pair in
+                        let name = MemoryNamespace(key: pair.namespaceKey).flatMap { ns -> String? in
+                            guard case .project(let id) = ns else { return nil }
+                            return ProjectManager.shared.project(for: id)?.name
+                        }
+                        return (pair.namespaceKey, name, pair.count)
+                    }
+                }
+
             let defaultId = Agent.defaultId.uuidString
             let loadedDefaultPinned = (try? db.loadPinnedFacts(agentId: defaultId, limit: 100)) ?? []
             let loadedDefaultEpisodes = (try? db.loadEpisodes(agentId: defaultId, limit: 50)) ?? []
@@ -1042,6 +1119,7 @@ struct MemoryView: View {
                 processingStats = loadedStats
                 dbSizeBytes = loadedSize
                 agentMemoryCounts = resolvedCounts
+                projectMemoryCounts = resolvedProjectCounts
                 defaultAgentPinned = loadedDefaultPinned
                 defaultAgentEpisodes = loadedDefaultEpisodes
                 pendingSignals = loadedPending

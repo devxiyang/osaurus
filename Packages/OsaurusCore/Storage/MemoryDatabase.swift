@@ -1568,6 +1568,34 @@ public final class MemoryDatabase: @unchecked Sendable {
         return count
     }
 
+    /// Memory counts per `project-*` namespace: episodes + active pinned
+    /// facts combined. Separate from `agentIdsWithPinnedFacts` because a
+    /// young project usually has episodes before any fact has been
+    /// promoted, and a facts-only count would hide it from the Memory view.
+    public func projectNamespaceCounts() throws -> [(namespaceKey: String, count: Int)] {
+        var results: [(String, Int)] = []
+        try prepareAndExecute(
+            """
+            SELECT agent_id, SUM(n) FROM (
+                SELECT agent_id, COUNT(*) AS n FROM episodes
+                    WHERE agent_id LIKE 'project-%' GROUP BY agent_id
+                UNION ALL
+                SELECT agent_id, COUNT(*) AS n FROM pinned_facts
+                    WHERE agent_id LIKE 'project-%' AND status = 'active' GROUP BY agent_id
+            ) GROUP BY agent_id ORDER BY 2 DESC
+            """,
+            bind: { _ in },
+            process: { stmt in
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let key = String(cString: sqlite3_column_text(stmt, 0))
+                    let count = Int(sqlite3_column_int(stmt, 1))
+                    results.append((key, count))
+                }
+            }
+        )
+        return results
+    }
+
     public func agentIdsWithPinnedFacts() throws -> [(agentId: String, count: Int)] {
         var results: [(String, Int)] = []
         try prepareAndExecute(
