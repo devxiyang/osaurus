@@ -82,11 +82,7 @@ struct ProjectDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 instructionsSection
-                // Only meaningful once the user has knowledge collections;
-                // the empty case would just advertise an unrelated feature.
-                if !knowledgeManager.collections.isEmpty {
-                    knowledgeSection
-                }
+                knowledgeSection
                 conversationsSection
             }
             .frame(maxWidth: 640)
@@ -230,17 +226,53 @@ struct ProjectDetailView: View {
     /// with the agent's own grants at request time).
     private var knowledgeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Knowledge", bundle: .module)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(theme.primaryText)
+            HStack {
+                Text("Knowledge", bundle: .module)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(theme.primaryText)
+                Spacer()
+                Button {
+                    AppDelegate.shared?.showManagementWindow(initialTab: .knowledge)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Add Collection", bundle: .module)
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundColor(theme.accentColor)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
 
             Text("Collections every chat in this project can search.", bundle: .module)
                 .font(.system(size: 11))
                 .foregroundColor(theme.secondaryText)
 
-            VStack(spacing: 2) {
-                ForEach(knowledgeManager.collections) { collection in
-                    knowledgeToggleRow(collection)
+            if knowledgeManager.collections.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "books.vertical")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(theme.tertiaryText)
+                    Text(
+                        "No collections yet. Create one to give this project's chats shared knowledge.",
+                        bundle: .module
+                    )
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(theme.secondaryBackground.opacity(theme.isDark ? 0.35 : 0.5))
+                )
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(knowledgeManager.collections) { collection in
+                        knowledgeToggleRow(collection)
+                    }
                 }
             }
         }
