@@ -1208,7 +1208,10 @@ private struct ChatToolbarBackContent: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .pointingHandCursor()
+            // The push/pop cursor helper loses to the title bar's cursor-rect
+            // updates over this wide an item; register a real AppKit cursor
+            // rect instead, which the title bar machinery respects.
+            .background(PointingHandCursorRect())
             .onHover { hovering in
                 withAnimation(.easeOut(duration: 0.15)) {
                     isHovered = hovering
