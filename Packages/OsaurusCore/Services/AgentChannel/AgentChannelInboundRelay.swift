@@ -362,7 +362,7 @@ final class AgentChannelInboundRelay {
     /// `AgentChannelInboundActivityPresentation`: with channel-triggered runs
     /// barred from proactive publishing, this is a silently dropped reply
     /// unless the activity UI explains it.
-    static let autoReplyDisabledReason = "auto_reply_disabled"
+    nonisolated static let autoReplyDisabledReason = "auto_reply_disabled"
 
     private func waitForReply(taskId: UUID, runStartedAt: Date) async -> TerminalReply {
         let deadline = Date().addingTimeInterval(Self.maxReplyWait)
