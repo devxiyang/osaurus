@@ -728,19 +728,17 @@ struct MemoryView: View {
                         name: entry.name,
                         count: entry.count,
                         onPreviewContext: {
-                            Task {
-                                let cfg = MemoryConfigurationStore.load()
-                                let ctx = await MemoryContextAssembler.assembleContext(
-                                    agentId: entry.namespaceKey,
-                                    config: cfg,
-                                    includeGlobalBlocks: false
-                                )
-                                let trimmed = ctx.trimmingCharacters(in: .whitespacesAndNewlines)
-                                let text =
-                                    trimmed.isEmpty
-                                    ? L("(No memory context assembled — memory may be empty or disabled)")
-                                    : trimmed
-                                contextPreviewItem = ContextPreviewItem(text: text)
+                            // Read stored rows directly instead of going through
+                            // `assembleContext`: the assembler's relevance gate
+                            // returns `.none` for an empty query, which made this
+                            // preview always come back blank even with memories
+                            // present. Chat injection is unaffected (it passes the
+                            // user's message as the query).
+                            Task.detached {
+                                let text = Self.projectNamespacePreview(entry.namespaceKey)
+                                await MainActor.run {
+                                    contextPreviewItem = ContextPreviewItem(text: text)
+                                }
                             }
                         },
                         onForget: {
@@ -750,6 +748,32 @@ struct MemoryView: View {
                 }
             }
         }
+    }
+
+    /// Everything stored under a project namespace, formatted like the
+    /// "## Shared project memory" block the composer injects. Reads the
+    /// rows directly (no relevance gate, no vector search) so the preview
+    /// always reflects what's on disk. Blocking DB reads — call off main.
+    private static func projectNamespacePreview(_ namespaceKey: String) -> String {
+        let facts = (try? MemoryDatabase.shared.loadPinnedFacts(agentId: namespaceKey, limit: 50)) ?? []
+        let episodes =
+            (try? MemoryDatabase.shared.loadEpisodes(agentId: namespaceKey, days: 3650, limit: 50)) ?? []
+
+        var blocks: [String] = []
+        if !facts.isEmpty {
+            blocks.append(
+                "## Things I remember\n" + facts.map { "- \($0.content)" }.joined(separator: "\n"))
+        }
+        if !episodes.isEmpty {
+            let lines = episodes.map { ep in
+                "- [\(String(ep.conversationAt.prefix(10)))] \(ep.summary)"
+            }
+            blocks.append("## What we discussed before\n" + lines.joined(separator: "\n"))
+        }
+        guard !blocks.isEmpty else {
+            return L("(No memory context assembled — memory may be empty or disabled)")
+        }
+        return "## Shared project memory\n\n" + blocks.joined(separator: "\n\n")
     }
 
     /// Purge one project namespace (rows + vector index + cache) and
