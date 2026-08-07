@@ -91,6 +91,14 @@ struct AgentChannelInboundActivityTests {
         }
     }
 
+    @Test func autoReplyDisabledGuidancePointsAtTheReplyAutomaticallyToggle() {
+        let guidance = AgentChannelInboundActivityPresentation.guidance(
+            stage: .agentReplied,
+            reason: "auto_reply_disabled"
+        )
+        #expect(guidance?.contains("Reply Automatically") == true)
+    }
+
     @Test func mentionGuidanceExplainsBotUserVersusOsaurusAgentConfusion() {
         let guidance = AgentChannelInboundActivityPresentation.guidance(
             stage: .dispatchSuppressed,
