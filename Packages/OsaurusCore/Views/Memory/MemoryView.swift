@@ -1105,7 +1105,9 @@ struct MemoryView: View {
             }
             loadedSize = db.databaseSizeBytes()
 
-            let agentEntries = (try? db.agentIdsWithPinnedFacts()) ?? []
+            // Episodes + pinned facts, so episode-only agents (nothing
+            // pinned yet) still get a row in the Agents card.
+            let agentEntries = (try? db.agentNamespaceCounts()) ?? []
 
             let agents = await MainActor.run { agentManager.agents }
             // Duplicate-tolerant: two agent files can share an id, and

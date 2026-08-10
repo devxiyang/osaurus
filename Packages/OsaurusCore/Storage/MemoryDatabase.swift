@@ -1596,6 +1596,34 @@ public final class MemoryDatabase: @unchecked Sendable {
         return results
     }
 
+    /// Episodes + active pinned facts per agent namespace, excluding
+    /// project namespaces. Same union the project rows use — an agent
+    /// whose memory is all episodes (no pinned facts yet) must still
+    /// appear in the Agents card.
+    public func agentNamespaceCounts() throws -> [(agentId: String, count: Int)] {
+        var results: [(String, Int)] = []
+        try prepareAndExecute(
+            """
+            SELECT agent_id, SUM(n) FROM (
+                SELECT agent_id, COUNT(*) AS n FROM episodes
+                    WHERE agent_id NOT LIKE 'project-%' GROUP BY agent_id
+                UNION ALL
+                SELECT agent_id, COUNT(*) AS n FROM pinned_facts
+                    WHERE agent_id NOT LIKE 'project-%' AND status = 'active' GROUP BY agent_id
+            ) GROUP BY agent_id ORDER BY 2 DESC
+            """,
+            bind: { _ in },
+            process: { stmt in
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let key = String(cString: sqlite3_column_text(stmt, 0))
+                    let count = Int(sqlite3_column_int(stmt, 1))
+                    results.append((key, count))
+                }
+            }
+        )
+        return results
+    }
+
     public func agentIdsWithPinnedFacts() throws -> [(agentId: String, count: Int)] {
         var results: [(String, Int)] = []
         try prepareAndExecute(

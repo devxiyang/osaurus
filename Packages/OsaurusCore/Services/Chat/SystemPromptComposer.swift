@@ -374,19 +374,35 @@ public struct SystemPromptComposer: Sendable {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return agentSection }
 
-        // Exact-line dedupe against the agent lane: the same agent's
-        // distillates are dual-written to both namespaces, so their lines
-        // are literal copies. Near-duplicates from OTHER agents are kept —
-        // suppressing a fact just because a different agent phrased it
-        // similarly risks dropping real information.
-        let agentLines = Set(
-            (agentSection ?? "").split(separator: "\n").map {
-                $0.trimmingCharacters(in: .whitespaces)
-            }.filter { !$0.isEmpty })
+        // Dedupe against the agent lane. Exact match catches the same
+        // agent's dual-written distillates (literal copies); the Jaccard
+        // pass additionally drops near-identical phrasings of the same
+        // fact distilled from different sessions. The 0.85 threshold is
+        // deliberately much stricter than the 0.6 the pinned-fact store
+        // uses: a fact from ANOTHER agent that merely resembles one of
+        // this agent's lines is real information and must survive —
+        // only virtually-verbatim repeats are suppressed.
+        let agentLineTexts = (agentSection ?? "").split(separator: "\n").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }.filter { !$0.isEmpty }
+        let agentLines = Set(agentLineTexts)
+        let agentLineTokens = agentLineTexts.map { TextSimilarity.tokenize($0) }
         let freshLines = trimmed.split(separator: "\n").filter { line in
             let t = line.trimmingCharacters(in: .whitespaces)
-            return t.isEmpty || !agentLines.contains(t)
+            if t.isEmpty || t.hasPrefix("#") { return true }
+            if agentLines.contains(t) { return false }
+            let tokens = TextSimilarity.tokenize(t)
+            return !agentLineTokens.contains {
+                TextSimilarity.jaccardTokenized($0, tokens) > 0.85
+            }
         }
+        // Headers survive the filter unconditionally, so require at least
+        // one real content line before paying for the block at all.
+        let hasContent = freshLines.contains { line in
+            let t = line.trimmingCharacters(in: .whitespaces)
+            return !t.isEmpty && !t.hasPrefix("#")
+        }
+        guard hasContent else { return agentSection }
         let fresh = freshLines.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fresh.isEmpty else { return agentSection }
