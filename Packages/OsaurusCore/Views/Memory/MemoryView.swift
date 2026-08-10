@@ -754,7 +754,7 @@ struct MemoryView: View {
     /// "## Shared project memory" block the composer injects. Reads the
     /// rows directly (no relevance gate, no vector search) so the preview
     /// always reflects what's on disk. Blocking DB reads — call off main.
-    private static func projectNamespacePreview(_ namespaceKey: String) -> String {
+    private nonisolated static func projectNamespacePreview(_ namespaceKey: String) -> String {
         let facts = (try? MemoryDatabase.shared.loadPinnedFacts(agentId: namespaceKey, limit: 50)) ?? []
         let episodes =
             (try? MemoryDatabase.shared.loadEpisodes(agentId: namespaceKey, days: 3650, limit: 50)) ?? []
