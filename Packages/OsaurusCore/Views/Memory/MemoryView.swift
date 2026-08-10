@@ -284,7 +284,10 @@ struct MemoryView: View {
                 selection: $selectedTab,
                 counts: [
                     .memories: totalPinned + totalEpisodes,
-                    .agents: agentMemoryCounts.count,
+                    // The tab hosts both the agent and project memory cards,
+                    // so its count covers every row shown inside it — a lone
+                    // project namespace must not read as "Agents (0)".
+                    .agents: agentMemoryCounts.count + projectMemoryCounts.count,
                 ],
                 badges: [.diagnostics: pendingSignals.totalSignals]
             )
