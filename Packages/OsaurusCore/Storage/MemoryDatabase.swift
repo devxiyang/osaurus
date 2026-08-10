@@ -1950,11 +1950,11 @@ public final class MemoryDatabase: @unchecked Sendable {
     /// never written under project namespaces, so those tables are not
     /// touched.
     public func deleteNamespaceData(agentId: String) throws {
-        try inTransaction { _ in
-            _ = try executeUpdate("DELETE FROM episodes WHERE agent_id = ?1") { stmt in
+        try inTransaction { connection in
+            try Self.executeUpdate(on: connection, "DELETE FROM episodes WHERE agent_id = ?1") { stmt in
                 Self.bindText(stmt, index: 1, value: agentId)
             }
-            _ = try executeUpdate("DELETE FROM pinned_facts WHERE agent_id = ?1") { stmt in
+            try Self.executeUpdate(on: connection, "DELETE FROM pinned_facts WHERE agent_id = ?1") { stmt in
                 Self.bindText(stmt, index: 1, value: agentId)
             }
         }
