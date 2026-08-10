@@ -232,6 +232,59 @@ public actor MemoryService {
         await syncNow(force: false)
     }
 
+    // MARK: - Residency-triggered Drain
+
+    private var residencyDrainTask: Task<Void, Never>?
+    private var residencyObserverArmed = false
+
+    /// Drain pending signals whenever the core model becomes resident.
+    ///
+    /// A large (>2B) local core model never passes the background
+    /// residency gate on its own, so without this, buffered turns sit
+    /// pending until the user finds the manual "Distill pending" button.
+    /// Observing `.modelRuntimeResidencyChanged` turns "signals wait
+    /// forever" into "signals drain the next time the model is loaded
+    /// for anything". Every drain still routes through `syncNow(force:
+    /// false)`, so the existing gates (enabled, cheap-to-distill,
+    /// chat-idle yield via the coordinator) all keep applying — an
+    /// eviction event or an unrelated model load is a cheap no-op.
+    public func armResidencyDrainOnModelLoad() {
+        guard !residencyObserverArmed else { return }
+        residencyObserverArmed = true
+        NotificationCenter.default.addObserver(
+            forName: .modelRuntimeResidencyChanged, object: nil, queue: nil
+        ) { _ in
+            Task { await MemoryService.shared.residencyDidChange() }
+        }
+    }
+
+    private func residencyDidChange() {
+        // Debounce: residency can flap during model switches/handoffs;
+        // wait for it to settle so a load immediately followed by an
+        // eviction doesn't start a doomed distill.
+        residencyDrainTask?.cancel()
+        residencyDrainTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await self?.drainPendingIfCheap()
+        }
+    }
+
+    private func drainPendingIfCheap() async {
+        let config = MemoryConfigurationStore.load()
+        guard config.enabled else { return }
+        // Cheap DB check first — the residency notification fires on
+        // every load/eviction and most of the time there is nothing
+        // pending, so don't touch the model catalog for a no-op.
+        let pending = (try? db.pendingConversations()) ?? []
+        guard !pending.isEmpty else { return }
+        guard await canDistillCheaply() else { return }
+        MemoryLogger.service.info(
+            "residency drain: core model resident with \(pending.count) pending conversation(s); draining"
+        )
+        await syncNow(force: false)
+    }
+
     /// Best-effort flush of every armed debounce task at app quit. Cancels
     /// each pending sleep so distillation runs immediately, then awaits up
     /// to `timeoutSeconds` for them to finish before returning. Callers
@@ -656,6 +709,18 @@ public actor MemoryService {
         // `nil` means the coordinator's residency gate short-circuited the
         // run (`requireResident && !canDistillCheaply`); signals stay
         // pending and recover next launch / once the model is resident.
+        // Pre-fix this skip wrote no processing-log row at all, so the
+        // diagnostics panel showed a healthy-looking idle pipeline while
+        // turns silently queued behind a never-resident large core model.
+        if outcome == nil {
+            logProcessing(
+                agentId: agentId,
+                taskType: "distill",
+                model: "core",
+                status: "skipped",
+                details: "not_resident"
+            )
+        }
         return outcome ?? .skipped(reason: "not_resident")
     }
 

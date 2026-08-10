@@ -122,7 +122,9 @@ struct MemoryView: View {
     @State private var isLoading = true
     @State private var isRefreshing = false
     @State private var isSyncing = false
-    @State private var isDistilling = false
+    // Internal (not private) so the MemoryView+Diagnostics extension can
+    // drive the same "Distill pending" action from the pending-signals row.
+    @State var isDistilling = false
     @State private var isConsolidating = false
     @State private var showIdentityEditor = false
     @State private var showAddOverride = false
@@ -425,20 +427,7 @@ struct MemoryView: View {
                 isDistilling ? L("Distilling...") : L("Distill pending"),
                 icon: "wand.and.stars"
             ) {
-                guard !isDistilling else { return }
-                isDistilling = true
-                Task.detached {
-                    // `force: true` — user explicitly asked, so the
-                    // coordinator's residency gate is bypassed. Chat-
-                    // idle wait still applies per-distill so a live
-                    // chat doesn't get its tok/sec halved.
-                    await MemoryService.shared.syncNow(force: true)
-                    await MainActor.run {
-                        isDistilling = false
-                        loadData()
-                        showToast(L("Pending distillation complete"))
-                    }
-                }
+                runDistillPending()
             }
             .disabled(isDistilling || !config.enabled)
 
@@ -749,6 +738,26 @@ struct MemoryView: View {
                         }
                     )
                 }
+            }
+        }
+    }
+
+    /// Force-drain every pending signal. Shared by the Identity tab's
+    /// "Distill pending" button and the Diagnostics pending-signals row.
+    /// Internal so the MemoryView+Diagnostics extension can call it.
+    func runDistillPending() {
+        guard !isDistilling else { return }
+        isDistilling = true
+        Task.detached {
+            // `force: true` — user explicitly asked, so the
+            // coordinator's residency gate is bypassed. Chat-
+            // idle wait still applies per-distill so a live
+            // chat doesn't get its tok/sec halved.
+            await MemoryService.shared.syncNow(force: true)
+            await MainActor.run {
+                isDistilling = false
+                loadData()
+                showToast(L("Pending distillation complete"))
             }
         }
     }
