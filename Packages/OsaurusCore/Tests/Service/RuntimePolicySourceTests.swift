@@ -164,8 +164,13 @@ struct RuntimePolicySourceTests {
         let registerBody = String(toolIndex[registerStart.lowerBound ..< registerEnd.lowerBound])
         #expect(registerBody.contains("ToolDatabase.shared.upsertEntry(entry)"))
         #expect(
-            !registerBody.contains("ToolSearchService.shared.indexEntry"),
-            "live tool registration must update the SQL/BM25 catalog without loading the embedding model on the launch path"
+            registerBody.contains("ToolSearchService.shared.indexEntry"),
+            "live dynamic-tool registration must incrementally update the vector catalog"
+        )
+        #expect(
+            !registerBody.contains("ToolSearchService.shared.initialize")
+                && !registerBody.contains("ToolSearchService.shared.rebuildIndex"),
+            "live registration may queue/index one entry but must not initialize or rebuild the embedding index"
         )
     }
 
@@ -781,7 +786,7 @@ struct RuntimePolicySourceTests {
         // and both xcworkspace Package.resolved files. Miss one and a release
         // surface resolves a revision nobody proved. OsaurusEvals resolves
         // this manifest transitively and its local Package.resolved is ignored.
-        let expectedRuntimeHardenedRevision = "5052be1ad6fdecdbc0da111abf8db5744894d17a"
+        let expectedRuntimeHardenedRevision = "fd7ce91cde0be283c817142d96c9b3f87efcc5e5"
         let manifestRevision = try Self.vmlxPinRevision(in: manifest)
         let coreResolvedRevision = try Self.vmlxPinRevision(in: coreResolved)
         let workspaceRevision = try Self.vmlxPinRevision(in: workspaceResolved)
