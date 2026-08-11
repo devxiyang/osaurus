@@ -69,12 +69,15 @@ struct OrnithToolSelectionTests {
         let reasoning: String
         let calls: [String]
         let tokens: Int
+        let progress: String
         var summary: String {
             let head = text.isEmpty
                 ? "(no visible text)"
                 : text.prefix(90).replacingOccurrences(of: "\n", with: " ")
             return "calls=\(calls.isEmpty ? "none" : calls.joined(separator: ",")) "
-                + "tokens=\(tokens) reasoning=\(reasoning.count)ch :: \(head)"
+                + "tokens=\(tokens) reasoning=\(reasoning.count)ch "
+                + "progress=\(progress.isEmpty ? "none" : "\"" + progress.prefix(120) + "\"") "
+                + ":: \(head)"
         }
     }
 
@@ -82,9 +85,12 @@ struct OrnithToolSelectionTests {
         let context = try await MLXLLM.LLMModelFactory.shared.load(
             from: bundle(bundleName), using: SwiftTransformersTokenizerLoader())
 
-        func ask(_ prompt: String) async throws -> Turn {
+        func ask(_ prompt: String, system: String? = nil) async throws -> Turn {
+            var messages: [[String: String]] = []
+            if let system { messages.append(["role": "system", "content": system]) }
+            messages.append(["role": "user", "content": prompt])
             let ids = try context.tokenizer.applyChatTemplate(
-                messages: [["role": "user", "content": prompt]],
+                messages: messages,
                 tools: tools,
                 additionalContext: ["add_generation_prompt": true])
             // `Generation.chunk` is nil for `.toolCall`, so a correct tool call
@@ -95,6 +101,7 @@ struct OrnithToolSelectionTests {
             var tokenCount = 0
             var stopReason = "?"
             var reasoning = ""
+            var progress = ""
             let stream = try MLXLMCommon.generate(
                 input: LMInput(tokens: MLXArray(ids.map { Int32($0) })[.newAxis, .ellipsis]),
                 parameters: GenerateParameters(maxTokens: 400, temperature: 0.0),
@@ -102,6 +109,7 @@ struct OrnithToolSelectionTests {
             for await item in stream {
                 if let c = item.chunk { text += c }
                 if let r = item.reasoning { reasoning += r }
+                if let p = item.toolCallProgress { progress += p }
                 if let call = item.toolCall { calls.append(call.function.name) }
                 if let info = item.info {
                     tokenCount = info.generationTokenCount
@@ -109,7 +117,8 @@ struct OrnithToolSelectionTests {
                 }
             }
 
-            return Turn(text: text, reasoning: reasoning, calls: calls, tokens: tokenCount)
+            return Turn(text: text, reasoning: reasoning, calls: calls, tokens: tokenCount,
+                        progress: progress)
         }
 
         // Answerable from the model's own knowledge — calling a tool is wrong.
@@ -118,6 +127,15 @@ struct OrnithToolSelectionTests {
                 + "memory use and cache behaviour.")
         // Not knowable without a tool — NOT calling one is wrong.
         let b = try await ask("What is the current date and time right now?")
+
+        // The bare-template run has no system prompt, while the app always
+        // composes one. If a plain assistant preamble is enough to make the
+        // call appear, the failure is prompt composition rather than the model.
+        let withSystem = try await ask(
+            "What is the current date and time right now?",
+            system: "You are a helpful assistant. Use the available tools when they are needed.")
+        print("[tools]   live-data WITH system prompt: \(withSystem.summary)")
+
         return (a, b)
     }
 
